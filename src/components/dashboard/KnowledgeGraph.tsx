@@ -1,6 +1,6 @@
 "use client";
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { MCP } from '@/lib/mcp-store';
 
 interface KnowledgeGraphProps {
@@ -8,6 +8,20 @@ interface KnowledgeGraphProps {
 }
 
 export const KnowledgeGraph: React.FC<KnowledgeGraphProps> = ({ mcps }) => {
+  const [isMounted, setIsMounted] = useState(false);
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
+  if (!isMounted) {
+    return (
+      <div className="relative w-full h-[300px] industrial-panel overflow-hidden bg-background/80 flex items-center justify-center">
+        <div className="text-[10px] font-code text-muted-foreground animate-pulse uppercase tracking-[0.2em]">Initialising Graph...</div>
+      </div>
+    );
+  }
+
   return (
     <div className="relative w-full h-[300px] industrial-panel overflow-hidden bg-background/80 flex items-center justify-center">
       <div className="absolute inset-0 opacity-10 pointer-events-none" style={{ backgroundImage: 'radial-gradient(var(--border) 1px, transparent 0)', backgroundSize: '20px 20px' }} />
@@ -48,8 +62,9 @@ export const KnowledgeGraph: React.FC<KnowledgeGraphProps> = ({ mcps }) => {
                 {mcp.name.toUpperCase()}
               </text>
               {mcp.explicitCapabilities.map((cap, cIdx) => {
-                const cX = x + 80 * Math.cos(angle + (cIdx - 1) * 0.3);
-                const cY = y + 60 * Math.sin(angle + (cIdx - 1) * 0.3);
+                const cAngle = angle + (cIdx - (mcp.explicitCapabilities.length - 1) / 2) * 0.2;
+                const cX = x + 80 * Math.cos(cAngle);
+                const cY = y + 60 * Math.sin(cAngle);
                 return (
                   <g key={`${mcp.id}-cap-${cIdx}`}>
                     <line x1={x} y1={y} x2={cX} y2={cY} className="schematic-line opacity-50" />
