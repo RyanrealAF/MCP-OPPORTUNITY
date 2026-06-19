@@ -1,10 +1,9 @@
 "use client";
 
-import React, { useState } from 'react';
+import React from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { Activity, Zap, Layers, AlertCircle, Clock } from 'lucide-react';
+import { Activity, Zap } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface AgentPanelProps {
@@ -12,27 +11,29 @@ interface AgentPanelProps {
   icon: React.ReactNode;
   description: string;
   onExecute: () => Promise<any>;
-  results?: any;
   loading?: boolean;
 }
 
 export const AgentPanel: React.FC<AgentPanelProps> = ({ 
-  name, icon, description, onExecute, results, loading 
+  name, icon, description, onExecute, loading 
 }) => {
   return (
-    <Card className="industrial-panel flex flex-col h-full rounded-none">
+    <Card className="industrial-panel flex flex-col rounded-none">
       <CardHeader className="p-3 border-b border-border bg-muted/30">
         <CardTitle className="flex items-center gap-2 text-[11px] font-code uppercase tracking-tighter text-muted-foreground">
           {icon}
           <span>{name}</span>
-          <div className="ml-auto flex items-center gap-1 opacity-50">
-            <span className="w-1 h-1 bg-green-500 rounded-full" />
-            <span>IDLE</span>
+          <div className="ml-auto flex items-center gap-1">
+            <span className={cn(
+              "w-1 h-1 rounded-full", 
+              loading ? "bg-primary animate-pulse" : "bg-green-500/50"
+            )} />
+            <span className="text-[8px] opacity-70">{loading ? 'ACTIVE' : 'IDLE'}</span>
           </div>
         </CardTitle>
       </CardHeader>
       <CardContent className="p-3 flex-1 flex flex-col gap-3">
-        <p className="text-[12px] text-muted-foreground leading-tight font-body">
+        <p className="text-[11px] text-muted-foreground leading-tight font-body">
           {description}
         </p>
         
@@ -50,20 +51,6 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
           )}
           {loading ? 'Processing...' : 'Execute Analysis'}
         </Button>
-
-        {results && (
-          <ScrollArea className="flex-1 mt-2 border border-border bg-background/50 p-2">
-            <div className="space-y-2">
-              <div className="flex items-center gap-2 text-[10px] text-primary font-code border-b border-border pb-1">
-                <Layers className="w-3 h-3" />
-                <span>OUTPUT STREAM</span>
-              </div>
-              <pre className="text-[10px] font-code text-foreground whitespace-pre-wrap leading-relaxed">
-                {JSON.stringify(results, null, 2)}
-              </pre>
-            </div>
-          </ScrollArea>
-        )}
       </CardContent>
     </Card>
   );

@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useState } from 'react';
-import { initialMCPs, initialGoals, MCP } from '@/lib/mcp-store';
+import React, { useState, useMemo } from 'react';
+import { initialMCPs, initialGoals, MCP, Goal } from '@/lib/mcp-store';
 import { 
   Terminal, 
   Database, 
@@ -13,10 +13,9 @@ import {
   LayoutGrid,
   FileSearch,
   Settings2,
-  ExternalLink,
   Plus,
   Layers,
-  Clock
+  Search
 } from 'lucide-react';
 import { KnowledgeGraph } from '@/components/dashboard/KnowledgeGraph';
 import { AgentPanel } from '@/components/dashboard/AgentPanel';
@@ -24,6 +23,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
+import { Input } from '@/components/ui/input';
 
 // AI Flow imports
 import { identifyImplicitCapabilities } from '@/ai/flows/identify-implicit-capabilities-flow';
@@ -32,7 +32,8 @@ import { generateNovelSystems } from '@/ai/flows/generate-novel-systems';
 
 export default function MOEPage() {
   const [mcps, setMcps] = useState<MCP[]>(initialMCPs);
-  const [goals, setGoals] = useState(initialGoals);
+  const [goals, setGoals] = useState<Goal[]>(initialGoals);
+  const [registrySearch, setRegistrySearch] = useState('');
   
   // Agent states
   const [capResults, setCapResults] = useState<any>(null);
@@ -45,6 +46,13 @@ export default function MOEPage() {
     setLoadingStates(prev => ({ ...prev, [agent]: state }));
   };
 
+  const filteredMcps = useMemo(() => {
+    return mcps.filter(m => 
+      m.name.toLowerCase().includes(registrySearch.toLowerCase()) ||
+      m.description.toLowerCase().includes(registrySearch.toLowerCase())
+    );
+  }, [mcps, registrySearch]);
+
   const runCapabilityAgent = async () => {
     toggleLoading('capability', true);
     try {
@@ -52,7 +60,7 @@ export default function MOEPage() {
       const result = await identifyImplicitCapabilities({ mcpDescriptions: desc });
       setCapResults(result);
       
-      // Update local graph with implicit findings
+      // Update local graph with implicit findings for the first node as a sample
       if (result.implicitCapabilities?.length > 0) {
         setMcps(prev => prev.map((m, i) => i === 0 ? {
           ...m, 
@@ -72,7 +80,7 @@ export default function MOEPage() {
       const result = await generateNovelSystems({ 
         mcpDescriptions: mcpDescs,
         capabilityDescriptions: capDescs,
-        contextOrConstraints: "Focus on AI-driven devops orchestration"
+        contextOrConstraints: "Focus on industrial automation and developer experience"
       });
       setCollResults(result);
     } finally {
@@ -93,9 +101,32 @@ export default function MOEPage() {
     }
   };
 
+  const handleAddMcp = () => {
+    const newId = `mcp-${String(mcps.length + 1).padStart(3, '0')}`;
+    const newMcp: MCP = {
+      id: newId,
+      name: `New Capability Provider ${mcps.length + 1}`,
+      description: 'A newly registered capability interface awaiting configuration.',
+      explicitCapabilities: ['Interface Stub'],
+      implicitCapabilities: [],
+      version: '1.0.0',
+      status: 'experimental'
+    };
+    setMcps([...mcps, newMcp]);
+  };
+
+  const handleAddGoal = () => {
+    const newGoal: Goal = {
+      id: `g-${String(goals.length + 1).padStart(3, '0')}`,
+      title: 'New Strategic Objective ' + (goals.length + 1),
+      status: 'pending'
+    };
+    setGoals([...goals, newGoal]);
+  };
+
   return (
     <div className="flex flex-col h-screen bg-background font-body select-none overflow-hidden">
-      {/* Top Header Layer: Navigation and Global State */}
+      {/* Top Header Layer */}
       <header className="h-12 border-b border-border bg-card flex items-center px-4 justify-between shrink-0">
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2">
@@ -108,18 +139,17 @@ export default function MOEPage() {
           <nav className="flex items-center gap-1">
             <Button variant="ghost" size="sm" className="h-8 text-[11px] font-code uppercase text-primary bg-primary/10 rounded-none border-b-2 border-primary">Dashboard</Button>
             <Button variant="ghost" size="sm" className="h-8 text-[11px] font-code uppercase text-muted-foreground hover:text-foreground rounded-none">Registry</Button>
-            <Button variant="ghost" size="sm" className="h-8 text-[11px] font-code uppercase text-muted-foreground hover:text-foreground rounded-none">Graph Explorer</Button>
           </nav>
         </div>
         <div className="flex items-center gap-6">
           <div className="flex items-center gap-4">
             <div className="text-right">
-              <div className="text-[9px] font-code text-muted-foreground uppercase leading-none">Graph Density</div>
-              <div className="text-xs font-code text-primary leading-none">0.842 η</div>
+              <div className="text-[9px] font-code text-muted-foreground uppercase leading-none">MCP Nodes</div>
+              <div className="text-xs font-code text-primary leading-none">{mcps.length} Registered</div>
             </div>
             <div className="text-right">
-              <div className="text-[9px] font-code text-muted-foreground uppercase leading-none">MCP Nodes</div>
-              <div className="text-xs font-code text-primary leading-none">{mcps.length} Active</div>
+              <div className="text-[9px] font-code text-muted-foreground uppercase leading-none">Active Goals</div>
+              <div className="text-xs font-code text-primary leading-none">{goals.length} Processing</div>
             </div>
           </div>
           <Button variant="outline" size="icon" className="h-8 w-8 rounded-none border-border">
@@ -128,27 +158,38 @@ export default function MOEPage() {
         </div>
       </header>
 
-      {/* Main Workspace: 3-Column Industrial Layout */}
+      {/* Main Workspace */}
       <main className="flex-1 flex overflow-hidden">
         
-        {/* Left Column: Core (Registry & Inventory) */}
+        {/* Left Column: Core Registry */}
         <div className="w-[320px] border-r border-border flex flex-col shrink-0 bg-muted/10">
-          <div className="p-3 bg-muted/20 border-b border-border flex items-center justify-between">
-            <div className="flex items-center gap-2 text-[11px] font-code uppercase text-muted-foreground">
-              <Database className="w-3.5 h-3.5" />
-              <span>Core Registry</span>
+          <div className="p-3 bg-muted/20 border-b border-border flex flex-col gap-2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-[11px] font-code uppercase text-muted-foreground">
+                <Database className="w-3.5 h-3.5" />
+                <span>Registry Inventory</span>
+              </div>
+              <Button onClick={handleAddMcp} variant="ghost" size="icon" className="h-6 w-6 text-primary hover:bg-primary/10">
+                <Plus className="w-4 h-4" />
+              </Button>
             </div>
-            <Button variant="ghost" size="icon" className="h-6 w-6 text-primary hover:bg-primary/10">
-              <Plus className="w-4 h-4" />
-            </Button>
+            <div className="relative">
+              <Search className="absolute left-2 top-2.5 h-3 w-3 text-muted-foreground" />
+              <Input 
+                placeholder="Search MCPs..." 
+                className="h-8 pl-8 text-[11px] font-code rounded-none border-border bg-background"
+                value={registrySearch}
+                onChange={(e) => setRegistrySearch(e.target.value)}
+              />
+            </div>
           </div>
           <ScrollArea className="flex-1 p-2">
             <div className="space-y-1">
-              {mcps.map(mcp => (
+              {filteredMcps.map(mcp => (
                 <div key={mcp.id} className="industrial-panel p-2 mb-2 group hover:border-primary/50 transition-colors cursor-pointer">
                   <div className="flex items-center justify-between mb-1">
                     <span className="text-[10px] font-code text-muted-foreground uppercase tracking-widest">{mcp.id}</span>
-                    <Badge variant={mcp.status === 'active' ? 'secondary' : 'outline'} className="text-[8px] h-3 px-1 rounded-none border-border">
+                    <Badge variant={mcp.status === 'active' ? 'secondary' : 'outline'} className="text-[8px] h-3 px-1 rounded-none border-border uppercase">
                       {mcp.status}
                     </Badge>
                   </div>
@@ -171,7 +212,12 @@ export default function MOEPage() {
             </div>
           </ScrollArea>
           <div className="p-3 border-t border-border bg-muted/20">
-            <div className="text-[9px] font-code text-muted-foreground uppercase mb-2">System Goals</div>
+            <div className="flex items-center justify-between mb-2">
+              <div className="text-[9px] font-code text-muted-foreground uppercase">Strategic Goals</div>
+              <Button onClick={handleAddGoal} variant="ghost" size="icon" className="h-5 w-5 text-primary">
+                <Plus className="w-3.5 h-3.5" />
+              </Button>
+            </div>
             <div className="space-y-1">
               {goals.map(goal => (
                 <div key={goal.id} className="flex items-start gap-2 p-1.5 border border-border/50 bg-background/50">
@@ -183,61 +229,37 @@ export default function MOEPage() {
           </div>
         </div>
 
-        {/* Center Column: Experience & Intelligence (Visualization & Analytics) */}
+        {/* Center Column: Experience Layer */}
         <div className="flex-1 flex flex-col bg-background relative">
-          {/* Top Panel: The Knowledge Graph */}
-          <div className="p-3-flex-1 flex flex-col min-h-0 overflow-hidden">
+          <div className="p-3 flex-1 flex flex-col min-h-0 overflow-hidden">
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-2 text-[11px] font-code uppercase text-muted-foreground">
                 <LayoutGrid className="w-3.5 h-3.5" />
-                <span>Experience Layer: Shared Knowledge Graph</span>
-              </div>
-              <div className="flex items-center gap-3">
-                <div className="flex items-center gap-1.5 text-[10px] font-code text-primary">
-                  <div className="w-2 h-2 rounded-full border border-primary flex items-center justify-center">
-                    <div className="w-1 h-1 bg-primary rounded-full animate-pulse" />
-                  </div>
-                  <span>ACTIVE REASONING</span>
-                </div>
+                <span>Ecosystem Visualization</span>
               </div>
             </div>
             
             <div className="flex-1 relative flex flex-col gap-3 overflow-hidden">
               <KnowledgeGraph mcps={mcps} />
               
-              {/* Dashboard Matrix */}
-              <div className="grid grid-cols-4 gap-3">
-                {[
-                  { label: 'Network Latency', value: '14ms', unit: 'ms', trend: 'down' },
-                  { label: 'Reasoning Depth', value: '0.94', unit: 'σ', trend: 'up' },
-                  { label: 'Collision Prob.', value: '18.4%', unit: '%', trend: 'up' },
-                  { label: 'Gap Criticality', value: 'HIGH', unit: '', trend: 'none' },
-                ].map(stat => (
-                  <div key={stat.label} className="industrial-panel p-2 bg-muted/10">
-                    <div className="text-[9px] font-code text-muted-foreground uppercase">{stat.label}</div>
-                    <div className="text-lg font-code text-primary leading-tight mt-1">{stat.value}</div>
-                  </div>
-                ))}
-              </div>
-
-              {/* Intelligence Report Viewer */}
+              {/* Intelligence Feed */}
               <div className="flex-1 industrial-panel bg-muted/5 flex flex-col overflow-hidden">
                 <div className="p-2 border-b border-border bg-muted/20 flex items-center gap-2 text-[10px] font-code uppercase text-muted-foreground">
                   <FileSearch className="w-3 h-3" />
-                  <span>Integrated Intelligence Feed</span>
+                  <span>Agent Analysis Stream</span>
                 </div>
                 <ScrollArea className="flex-1 p-3">
                   <div className="space-y-4">
                     {!capResults && !collResults && !intentResults && (
                       <div className="flex flex-col items-center justify-center h-48 opacity-20 text-center">
                         <Terminal className="w-8 h-8 mb-2" />
-                        <p className="font-code text-xs">AWAITING AGENT INPUT STREAMS...</p>
+                        <p className="font-code text-xs">AWAITING ANALYSIS TRIGGER...</p>
                       </div>
                     )}
                     
                     {capResults && (
                       <div className="border-l-2 border-primary pl-3 py-1 bg-primary/5 mb-4">
-                        <h4 className="text-[11px] font-code uppercase text-primary mb-1">Implicit Capability Expansion</h4>
+                        <h4 className="text-[11px] font-code uppercase text-primary mb-1">Capability Expansion</h4>
                         <div className="space-y-2">
                           {capResults.implicitCapabilities.map((ic: any, idx: number) => (
                             <div key={idx} className="bg-background border border-border p-2">
@@ -251,13 +273,13 @@ export default function MOEPage() {
 
                     {collResults && (
                       <div className="border-l-2 border-chart-2 pl-3 py-1 bg-chart-2/5 mb-4">
-                        <h4 className="text-[11px] font-code uppercase text-chart-2 mb-1">Novel System Collisions</h4>
+                        <h4 className="text-[11px] font-code uppercase text-chart-2 mb-1">Novel System Propositions</h4>
                         <div className="space-y-2">
                           {collResults.novelSystems.map((ns: any, idx: number) => (
                             <div key={idx} className="bg-background border border-border p-2">
                               <div className="flex items-center justify-between mb-1">
                                 <div className="text-[10px] font-bold text-foreground font-headline">{ns.name}</div>
-                                <div className="text-[10px] font-code text-chart-2">RANK: {ns.noveltyRank}</div>
+                                <div className="text-[10px] font-code text-chart-2 px-1 border border-chart-2 bg-chart-2/10">STRENGTH: {ns.noveltyRank}%</div>
                               </div>
                               <div className="text-[10px] text-muted-foreground font-body leading-relaxed mb-2">{ns.description}</div>
                               <div className="flex flex-wrap gap-1">
@@ -273,7 +295,7 @@ export default function MOEPage() {
 
                     {intentResults && (
                       <div className="border-l-2 border-chart-3 pl-3 py-1 bg-chart-3/5">
-                        <h4 className="text-[11px] font-code uppercase text-chart-3 mb-1">Intent Gap Analysis</h4>
+                        <h4 className="text-[11px] font-code uppercase text-chart-3 mb-1">Ecosystem Gap Identification</h4>
                         <div className="bg-background border border-border p-2">
                           <div className="text-[10px] text-muted-foreground font-body leading-relaxed mb-3">{intentResults.reasoning}</div>
                           <div className="grid grid-cols-1 gap-1">
@@ -294,12 +316,12 @@ export default function MOEPage() {
           </div>
         </div>
 
-        {/* Right Column: Intelligence (Agents) */}
+        {/* Right Column: Agents */}
         <div className="w-[300px] border-l border-border flex flex-col shrink-0 bg-muted/10">
-          <div className="p-3 bg-muted/20 border-b border-border flex items-center justify-between">
+          <div className="p-3 bg-muted/20 border-b border-border">
             <div className="flex items-center gap-2 text-[11px] font-code uppercase text-muted-foreground">
               <Cpu className="w-3.5 h-3.5" />
-              <span>Intelligence Layer</span>
+              <span>Reasoning Agents</span>
             </div>
           </div>
           <ScrollArea className="flex-1 p-2">
@@ -307,69 +329,42 @@ export default function MOEPage() {
               <AgentPanel 
                 name="Capability Agent"
                 icon={<GitBranch className="w-3.5 h-3.5" />}
-                description="Decides when to expand explicit capabilities into implicit potential by exploring the knowledge graph."
+                description="Identifies hidden potential within existing MCP providers by analyzing explicit metadata."
                 onExecute={runCapabilityAgent}
                 loading={loadingStates['capability']}
               />
               <AgentPanel 
                 name="Collision Agent"
                 icon={<Layers className="w-3.5 h-3.5" />}
-                description="Performs combinatorial reasoning to generate novel systems and project ideas using the novelty ranker."
+                description="Discovers novel system architectures by simulating combinatorial collisions between providers."
                 onExecute={runCollisionAgent}
                 loading={loadingStates['collision']}
               />
               <AgentPanel 
                 name="Intent Agent"
                 icon={<Target className="w-3.5 h-3.5" />}
-                description="Analyzes goals versus current capabilities to identify specific missing tools in the ecosystem."
+                description="Compares strategic goals against registered capabilities to map out missing technological pieces."
                 onExecute={runIntentAgent}
                 loading={loadingStates['intent']}
               />
-              <AgentPanel 
-                name="Future Agent"
-                icon={<Clock className="w-3.5 h-3.5" />}
-                description="Projects the ecosystem 18 months forward to predict potential bottlenecks and tool obsolescence."
-                onExecute={async () => {
-                   // Mocked as requested logic not available in ai flows
-                   toggleLoading('future', true);
-                   await new Promise(r => setTimeout(r, 1500));
-                   toggleLoading('future', false);
-                }}
-                loading={loadingStates['future']}
-              />
             </div>
           </ScrollArea>
-          <div className="p-3 border-t border-border bg-muted/20">
-            <div className="flex items-center justify-between text-[9px] font-code text-muted-foreground uppercase mb-2">
-              <span>System Integrity</span>
-              <span className="text-primary">99.98%</span>
-            </div>
-            <div className="w-full h-1 bg-muted border border-border">
-              <div className="w-[99.98%] h-full bg-primary" />
-            </div>
-          </div>
         </div>
       </main>
 
-      {/* Industrial Footer Status Bar */}
+      {/* Footer Status Bar */}
       <footer className="h-6 border-t border-border bg-muted/30 px-3 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-4 text-[9px] font-code text-muted-foreground">
           <div className="flex items-center gap-1">
             <div className="w-1.5 h-1.5 bg-green-500 rounded-full" />
-            <span>CORE_SYNC_ESTABLISHED</span>
+            <span>ECOSYSTEM_CONNECTED</span>
           </div>
           <Separator orientation="vertical" className="h-3 opacity-30" />
-          <div className="flex items-center gap-1">
-            <span>GRAPH_VERSION: v4.1.2-ALPHA</span>
-          </div>
+          <span>GRAPH_DENSITY: {((mcps.length * 2) / 100).toFixed(3)} η</span>
         </div>
         <div className="flex items-center gap-4 text-[9px] font-code text-muted-foreground uppercase">
-          <span className="flex items-center gap-1">
-            <ExternalLink className="w-2.5 h-2.5" />
-            Connect to Mainframe
-          </span>
-          <span>LATENCY: 0.002ms</span>
-          <span className="text-primary">Ready</span>
+          <span>{mcps.length} Nodes</span>
+          <span className="text-primary">System Ready</span>
         </div>
       </footer>
     </div>
