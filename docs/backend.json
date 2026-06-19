@@ -1,0 +1,58 @@
+
+{
+  "entities": {
+    "MCP": {
+      "title": "MCP",
+      "description": "A Managed Capability Provider representing an external integration or internal service.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "explicitCapabilities": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "implicitCapabilities": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": { "type": "string" },
+              "description": { "type": "string" }
+            }
+          }
+        },
+        "version": { "type": "string" },
+        "status": { "type": "string", "enum": ["active", "deprecated", "experimental"] },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "description", "status"]
+    },
+    "Goal": {
+      "title": "Goal",
+      "description": "A strategic objective that requires one or more MCP capabilities.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "analyzing", "complete"] },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "status"]
+    }
+  },
+  "auth": {
+    "providers": ["google.com"]
+  },
+  "firestore": {
+    "/users/{userId}/mcps/{mcpId}": {
+      "schema": "#/entities/MCP",
+      "description": "User-specific MCP registry."
+    },
+    "/users/{userId}/goals/{goalId}": {
+      "schema": "#/entities/Goal",
+      "description": "User-specific strategic goals."
+    }
+  }
+}

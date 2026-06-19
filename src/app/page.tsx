@@ -1,13 +1,11 @@
 "use client";
 
 import React, { useState, useMemo } from 'react';
-import { initialMCPs, initialGoals, MCP, Goal } from '@/lib/mcp-store';
 import { 
   Terminal, 
   Database, 
   Cpu, 
   GitBranch, 
-  Package, 
   Target, 
   AlertTriangle,
   LayoutGrid,
@@ -15,7 +13,11 @@ import {
   Settings2,
   Plus,
   Layers,
-  Search
+  Search,
+  LogOut,
+  Clock,
+  ShieldCheck,
+  Zap
 } from 'lucide-react';
 import { KnowledgeGraph } from '@/components/dashboard/KnowledgeGraph';
 import { AgentPanel } from '@/components/dashboard/AgentPanel';
@@ -24,6 +26,12 @@ import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { Input } from '@/components/ui/input';
+import { Card, CardContent } from '@/components/ui/card';
+
+// Firebase hooks
+import { useAuth, useUser, useFirestore, useCollection } from '@/firebase';
+import { collection, addDoc, serverTimestamp, query, orderBy } from 'firebase/firestore';
+import { GoogleAuthProvider, signInWithPopup, signOut } from 'firebase/auth';
 
 // AI Flow imports
 import { identifyImplicitCapabilities } from '@/ai/flows/identify-implicit-capabilities-flow';
@@ -31,15 +39,30 @@ import { identifyMissingToolsForGoals } from '@/ai/flows/identify-missing-tools-
 import { generateNovelSystems } from '@/ai/flows/generate-novel-systems';
 
 export default function MOEPage() {
-  const [mcps, setMcps] = useState<MCP[]>(initialMCPs);
-  const [goals, setGoals] = useState<Goal[]>(initialGoals);
+  const { user, loading: authLoading } = useUser();
+  const auth = useAuth();
+  const db = useFirestore();
+
+  // Firestore Collections
+  const mcpsQuery = useMemo(() => {
+    if (!db || !user) return null;
+    return query(collection(db, 'users', user.uid, 'mcps'), orderBy('updatedAt', 'desc'));
+  }, [db, user]);
+
+  const goalsQuery = useMemo(() => {
+    if (!db || !user) return null;
+    return query(collection(db, 'users', user.uid, 'goals'), orderBy('updatedAt', 'desc'));
+  }, [db, user]);
+
+  const { data: mcps = [] } = useCollection(mcpsQuery);
+  const { data: goals = [] } = useCollection(goalsQuery);
+
   const [registrySearch, setRegistrySearch] = useState('');
   
   // Agent states
   const [capResults, setCapResults] = useState<any>(null);
   const [collResults, setCollResults] = useState<any>(null);
   const [intentResults, setIntentResults] = useState<any>(null);
-  
   const [loadingStates, setLoadingStates] = useState<Record<string, boolean>>({});
 
   const toggleLoading = (agent: string, state: boolean) => {
@@ -47,7 +70,7 @@ export default function MOEPage() {
   };
 
   const filteredMcps = useMemo(() => {
-    return mcps.filter(m => 
+    return mcps.filter((m: any) => 
       m.name.toLowerCase().includes(registrySearch.toLowerCase()) ||
       m.description.toLowerCase().includes(registrySearch.toLowerCase())
     );
@@ -56,17 +79,9 @@ export default function MOEPage() {
   const runCapabilityAgent = async () => {
     toggleLoading('capability', true);
     try {
-      const desc = mcps.map(m => `${m.name}: ${m.description}`).join('\n');
+      const desc = mcps.map((m: any) => `${m.name}: ${m.description}`).join('\n');
       const result = await identifyImplicitCapabilities({ mcpDescriptions: desc });
       setCapResults(result);
-      
-      // Update local graph with implicit findings for the first node as a sample
-      if (result.implicitCapabilities?.length > 0) {
-        setMcps(prev => prev.map((m, i) => i === 0 ? {
-          ...m, 
-          implicitCapabilities: [...m.implicitCapabilities, ...result.implicitCapabilities.slice(0, 2)]
-        } : m));
-      }
     } finally {
       toggleLoading('capability', false);
     }
@@ -75,8 +90,8 @@ export default function MOEPage() {
   const runCollisionAgent = async () => {
     toggleLoading('collision', true);
     try {
-      const mcpDescs = mcps.map(m => m.description);
-      const capDescs = mcps.flatMap(m => m.explicitCapabilities);
+      const mcpDescs = mcps.map((m: any) => m.description);
+      const capDescs = mcps.flatMap((m: any) => m.explicitCapabilities || []);
       const result = await generateNovelSystems({ 
         mcpDescriptions: mcpDescs,
         capabilityDescriptions: capDescs,
@@ -92,8 +107,8 @@ export default function MOEPage() {
     toggleLoading('intent', true);
     try {
       const result = await identifyMissingToolsForGoals({
-        goals: goals.map(g => g.title),
-        existingCapabilities: mcps.flatMap(m => m.explicitCapabilities)
+        goals: goals.map((g: any) => g.title),
+        existingCapabilities: mcps.flatMap((m: any) => m.explicitCapabilities || [])
       });
       setIntentResults(result);
     } finally {
@@ -102,30 +117,68 @@ export default function MOEPage() {
   };
 
   const handleAddMcp = () => {
-    const newId = `mcp-${String(mcps.length + 1).padStart(3, '0')}`;
-    const newMcp: MCP = {
-      id: newId,
-      name: `New Capability Provider ${mcps.length + 1}`,
+    if (!db || !user) return;
+    addDoc(collection(db, 'users', user.uid, 'mcps'), {
+      name: 'New Capability Provider',
       description: 'A newly registered capability interface awaiting configuration.',
       explicitCapabilities: ['Interface Stub'],
       implicitCapabilities: [],
       version: '1.0.0',
-      status: 'experimental'
-    };
-    setMcps([...mcps, newMcp]);
+      status: 'experimental',
+      updatedAt: serverTimestamp()
+    });
   };
 
   const handleAddGoal = () => {
-    const newGoal: Goal = {
-      id: `g-${String(goals.length + 1).padStart(3, '0')}`,
-      title: 'New Strategic Objective ' + (goals.length + 1),
-      status: 'pending'
-    };
-    setGoals([...goals, newGoal]);
+    if (!db || !user) return;
+    addDoc(collection(db, 'users', user.uid, 'goals'), {
+      title: 'New Strategic Objective',
+      status: 'pending',
+      updatedAt: serverTimestamp()
+    });
   };
 
+  const handleSignIn = () => {
+    if (!auth) return;
+    signInWithPopup(auth, new GoogleAuthProvider());
+  };
+
+  const handleSignOut = () => {
+    if (!auth) return;
+    signOut(auth);
+  };
+
+  if (authLoading) {
+    return (
+      <div className="h-screen flex items-center justify-center bg-background">
+        <div className="animate-pulse font-code text-primary">INITIALIZING_SECURE_KERNEL...</div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <div className="h-screen flex items-center justify-center bg-background p-6">
+        <Card className="max-w-md w-full industrial-panel bg-card border-primary/20">
+          <CardContent className="p-8 flex flex-col items-center gap-6">
+            <div className="w-16 h-16 bg-primary/10 flex items-center justify-center border border-primary/30">
+              <ShieldCheck className="w-8 h-8 text-primary" />
+            </div>
+            <div className="text-center">
+              <h1 className="font-code text-xl font-bold text-primary mb-2 tracking-tighter uppercase">MOE // ACCESS_DENIED</h1>
+              <p className="text-sm text-muted-foreground font-body">Authentication required to interface with Ecosystem Opportunity Engine.</p>
+            </div>
+            <Button onClick={handleSignIn} className="w-full font-code uppercase tracking-widest rounded-none h-12">
+              Authorize with Google
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   return (
-    <div className="flex flex-col h-screen bg-background font-body select-none overflow-hidden">
+    <div className="flex flex-col h-screen bg-background font-body select-none overflow-hidden text-foreground">
       {/* Top Header Layer */}
       <header className="h-12 border-b border-border bg-card flex items-center px-4 justify-between shrink-0">
         <div className="flex items-center gap-4">
@@ -185,10 +238,10 @@ export default function MOEPage() {
           </div>
           <ScrollArea className="flex-1 p-2">
             <div className="space-y-1">
-              {filteredMcps.map(mcp => (
+              {filteredMcps.map((mcp: any) => (
                 <div key={mcp.id} className="industrial-panel p-2 mb-2 group hover:border-primary/50 transition-colors cursor-pointer">
                   <div className="flex items-center justify-between mb-1">
-                    <span className="text-[10px] font-code text-muted-foreground uppercase tracking-widest">{mcp.id}</span>
+                    <span className="text-[10px] font-code text-muted-foreground uppercase tracking-widest">{mcp.id?.slice(-6)}</span>
                     <Badge variant={mcp.status === 'active' ? 'secondary' : 'outline'} className="text-[8px] h-3 px-1 rounded-none border-border uppercase">
                       {mcp.status}
                     </Badge>
@@ -198,34 +251,47 @@ export default function MOEPage() {
                     {mcp.description}
                   </p>
                   <div className="flex flex-wrap gap-1">
-                    {mcp.explicitCapabilities.slice(0, 2).map(cap => (
+                    {(mcp.explicitCapabilities || []).slice(0, 2).map((cap: string) => (
                       <span key={cap} className="text-[9px] font-code px-1 bg-muted text-muted-foreground border border-border">
                         {cap}
                       </span>
                     ))}
-                    {mcp.explicitCapabilities.length > 2 && (
-                      <span className="text-[9px] font-code px-1 text-muted-foreground">+{mcp.explicitCapabilities.length - 2} more</span>
-                    )}
                   </div>
                 </div>
               ))}
             </div>
           </ScrollArea>
-          <div className="p-3 border-t border-border bg-muted/20">
+          
+          <div className="p-3 border-t border-border bg-muted/20 max-h-[250px] overflow-hidden flex flex-col">
             <div className="flex items-center justify-between mb-2">
               <div className="text-[9px] font-code text-muted-foreground uppercase">Strategic Goals</div>
               <Button onClick={handleAddGoal} variant="ghost" size="icon" className="h-5 w-5 text-primary">
                 <Plus className="w-3.5 h-3.5" />
               </Button>
             </div>
-            <div className="space-y-1">
-              {goals.map(goal => (
-                <div key={goal.id} className="flex items-start gap-2 p-1.5 border border-border/50 bg-background/50">
-                  <Target className="w-3 h-3 text-primary mt-0.5" />
-                  <span className="text-[10px] text-foreground font-body leading-tight">{goal.title}</span>
-                </div>
-              ))}
-            </div>
+            <ScrollArea className="flex-1">
+              <div className="space-y-1">
+                {goals.map((goal: any) => (
+                  <div key={goal.id} className="flex items-start gap-2 p-1.5 border border-border/50 bg-background/50">
+                    <Target className="w-3 h-3 text-primary mt-0.5" />
+                    <span className="text-[10px] text-foreground font-body leading-tight">{goal.title}</span>
+                  </div>
+                ))}
+              </div>
+            </ScrollArea>
+          </div>
+
+          {/* User Sign Out Section */}
+          <div className="p-3 border-t border-border bg-card">
+            <Button 
+              variant="destructive" 
+              size="sm" 
+              onClick={handleSignOut}
+              className="w-full h-10 font-code uppercase text-[10px] tracking-[0.2em] rounded-none bg-red-900/40 border border-red-500/50 hover:bg-red-800/60"
+            >
+              <LogOut className="w-3 h-3 mr-2" />
+              Terminate Session
+            </Button>
           </div>
         </div>
 
@@ -253,7 +319,7 @@ export default function MOEPage() {
                     {!capResults && !collResults && !intentResults && (
                       <div className="flex flex-col items-center justify-center h-48 opacity-20 text-center">
                         <Terminal className="w-8 h-8 mb-2" />
-                        <p className="font-code text-xs">AWAITING ANALYSIS TRIGGER...</p>
+                        <p className="font-code text-xs tracking-[0.5em]">AWAITING_INPUT_STREAM</p>
                       </div>
                     )}
                     
@@ -263,7 +329,7 @@ export default function MOEPage() {
                         <div className="space-y-2">
                           {capResults.implicitCapabilities.map((ic: any, idx: number) => (
                             <div key={idx} className="bg-background border border-border p-2">
-                              <div className="text-[10px] font-bold text-foreground font-headline mb-0.5">{ic.name}</div>
+                              <div className="text-[10px] font-bold text-foreground font-headline mb-0.5 uppercase tracking-tighter">{ic.name}</div>
                               <div className="text-[10px] text-muted-foreground font-body leading-relaxed">{ic.description}</div>
                             </div>
                           ))}
@@ -278,13 +344,13 @@ export default function MOEPage() {
                           {collResults.novelSystems.map((ns: any, idx: number) => (
                             <div key={idx} className="bg-background border border-border p-2">
                               <div className="flex items-center justify-between mb-1">
-                                <div className="text-[10px] font-bold text-foreground font-headline">{ns.name}</div>
-                                <div className="text-[10px] font-code text-chart-2 px-1 border border-chart-2 bg-chart-2/10">STRENGTH: {ns.noveltyRank}%</div>
+                                <div className="text-[10px] font-bold text-foreground font-headline uppercase">{ns.name}</div>
+                                <div className="text-[10px] font-code text-chart-2 px-1 border border-chart-2 bg-chart-2/10">MATCH: {ns.noveltyRank}%</div>
                               </div>
                               <div className="text-[10px] text-muted-foreground font-body leading-relaxed mb-2">{ns.description}</div>
                               <div className="flex flex-wrap gap-1">
                                 {ns.combinedMcps.map((mcp: string) => (
-                                  <span key={mcp} className="text-[8px] font-code px-1 border border-border/50 text-muted-foreground bg-muted/20">{mcp}</span>
+                                  <span key={mcp} className="text-[8px] font-code px-1 border border-border/50 text-muted-foreground bg-muted/20 uppercase">{mcp}</span>
                                 ))}
                               </div>
                             </div>
@@ -302,7 +368,7 @@ export default function MOEPage() {
                             {intentResults.missingTools.map((tool: string, idx: number) => (
                               <div key={idx} className="flex items-center gap-2 p-1.5 bg-muted/20 border border-border/30">
                                 <AlertTriangle className="w-3 h-3 text-chart-3" />
-                                <span className="text-[10px] font-code text-foreground">{tool}</span>
+                                <span className="text-[10px] font-code text-foreground uppercase tracking-tight">{tool}</span>
                               </div>
                             ))}
                           </div>
@@ -356,15 +422,18 @@ export default function MOEPage() {
       <footer className="h-6 border-t border-border bg-muted/30 px-3 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-4 text-[9px] font-code text-muted-foreground">
           <div className="flex items-center gap-1">
-            <div className="w-1.5 h-1.5 bg-green-500 rounded-full" />
+            <div className="w-1.5 h-1.5 bg-green-500 rounded-full shadow-[0_0_5px_rgba(34,197,94,0.5)]" />
             <span>ECOSYSTEM_CONNECTED</span>
           </div>
           <Separator orientation="vertical" className="h-3 opacity-30" />
-          <span>GRAPH_DENSITY: {((mcps.length * 2) / 100).toFixed(3)} η</span>
+          <div className="flex items-center gap-1">
+            <Clock className="w-2 h-2" />
+            <span>LAST_SYNC: {new Date().toLocaleTimeString()}</span>
+          </div>
         </div>
         <div className="flex items-center gap-4 text-[9px] font-code text-muted-foreground uppercase">
-          <span>{mcps.length} Nodes</span>
-          <span className="text-primary">System Ready</span>
+          <span>{user.email}</span>
+          <span className="text-primary font-bold">Authenticated</span>
         </div>
       </footer>
     </div>
