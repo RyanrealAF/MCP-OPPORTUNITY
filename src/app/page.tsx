@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { 
   Terminal, 
   Database, 
@@ -42,6 +42,15 @@ export default function MOEPage() {
   const { user, loading: authLoading } = useUser();
   const auth = useAuth();
   const db = useFirestore();
+
+  // Hydration protection
+  const [mounted, setMounted] = useState(false);
+  const [currentTime, setCurrentTime] = useState<string>('');
+
+  useEffect(() => {
+    setMounted(true);
+    setCurrentTime(new Date().toLocaleTimeString());
+  }, []);
 
   // Firestore Collections
   const mcpsQuery = useMemo(() => {
@@ -148,7 +157,7 @@ export default function MOEPage() {
     signOut(auth);
   };
 
-  if (authLoading) {
+  if (authLoading || !mounted) {
     return (
       <div className="h-screen flex items-center justify-center bg-background">
         <div className="animate-pulse font-code text-primary">INITIALIZING_SECURE_KERNEL...</div>
@@ -428,7 +437,7 @@ export default function MOEPage() {
           <Separator orientation="vertical" className="h-3 opacity-30" />
           <div className="flex items-center gap-1">
             <Clock className="w-2 h-2" />
-            <span>LAST_SYNC: {new Date().toLocaleTimeString()}</span>
+            <span>LAST_SYNC: {currentTime || 'INITIALIZING...'}</span>
           </div>
         </div>
         <div className="flex items-center gap-4 text-[9px] font-code text-muted-foreground uppercase">

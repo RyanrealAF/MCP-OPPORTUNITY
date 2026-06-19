@@ -8,13 +8,13 @@ interface KnowledgeGraphProps {
 }
 
 export const KnowledgeGraph: React.FC<KnowledgeGraphProps> = ({ mcps }) => {
-  const [isMounted, setIsMounted] = useState(false);
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    setIsMounted(true);
+    setMounted(true);
   }, []);
 
-  if (!isMounted) {
+  if (!mounted) {
     return (
       <div className="relative w-full h-[300px] industrial-panel overflow-hidden bg-background/80 flex items-center justify-center">
         <div className="text-[10px] font-code text-muted-foreground animate-pulse uppercase tracking-[0.2em]">Initialising Graph...</div>
@@ -46,29 +46,29 @@ export const KnowledgeGraph: React.FC<KnowledgeGraphProps> = ({ mcps }) => {
           return (
             <g key={mcp.id}>
               <line 
-                x1="400" y1="200" x2={x} y2={y} 
+                x1="400" y1="200" x2={x.toFixed(2)} y2={y.toFixed(2)} 
                 className="schematic-line" 
                 strokeDasharray="4 2"
                 markerEnd="url(#arrow)"
               />
               <rect 
-                x={x - 60} y={y - 15} width="120" height="30" 
+                x={(x - 60).toFixed(2)} y={(y - 15).toFixed(2)} width="120" height="30" 
                 className="fill-background stroke-border stroke-[0.5px]" 
               />
               <text 
-                x={x} y={y} textAnchor="middle" dominantBaseline="middle" 
+                x={x.toFixed(2)} y={y.toFixed(2)} textAnchor="middle" dominantBaseline="middle" 
                 className="fill-foreground font-code text-[9px] pointer-events-none"
               >
                 {mcp.name.toUpperCase()}
               </text>
-              {mcp.explicitCapabilities.map((cap, cIdx) => {
+              {(mcp.explicitCapabilities || []).map((cap, cIdx) => {
                 const cAngle = angle + (cIdx - (mcp.explicitCapabilities.length - 1) / 2) * 0.2;
                 const cX = x + 80 * Math.cos(cAngle);
                 const cY = y + 60 * Math.sin(cAngle);
                 return (
                   <g key={`${mcp.id}-cap-${cIdx}`}>
-                    <line x1={x} y1={y} x2={cX} y2={cY} className="schematic-line opacity-50" />
-                    <circle cx={cX} cy={cY} r="4" className="fill-primary/20 stroke-primary/40 stroke-[0.5px]" />
+                    <line x1={x.toFixed(2)} y1={y.toFixed(2)} x2={cX.toFixed(2)} y2={cY.toFixed(2)} className="schematic-line opacity-50" />
+                    <circle cx={cX.toFixed(2)} cy={cY.toFixed(2)} r="4" className="fill-primary/20 stroke-primary/40 stroke-[0.5px]" />
                   </g>
                 );
               })}
