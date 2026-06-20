@@ -25,6 +25,7 @@ export type GenerateMcpBoilerplateOutput = z.infer<typeof GenerateMcpBoilerplate
 
 const prompt = ai.definePrompt({
   name: 'generateMcpBoilerplatePrompt',
+  model: 'googleai/gemini-1.5-flash',
   input: { schema: GenerateMcpBoilerplateInputSchema },
   output: { schema: GenerateMcpBoilerplateOutputSchema },
   prompt: `You are an expert software architect specializing in the Managed Capability Provider (MCP) pattern.

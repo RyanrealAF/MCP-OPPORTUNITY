@@ -46,6 +46,7 @@ export async function identifyMissingToolsForGoals(
 
 const prompt = ai.definePrompt({
   name: 'identifyMissingToolsForGoalsPrompt',
+  model: 'googleai/gemini-1.5-flash',
   input: {schema: IdentifyMissingToolsForGoalsInputSchema},
   output: {schema: IdentifyMissingToolsForGoalsOutputSchema},
   prompt: `You are an expert strategic planner focused on identifying technological gaps within an ecosystem.

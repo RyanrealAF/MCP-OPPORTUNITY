@@ -47,6 +47,7 @@ export async function identifyImplicitCapabilities(
 
 const prompt = ai.definePrompt({
   name: 'identifyImplicitCapabilitiesPrompt',
+  model: 'googleai/gemini-1.5-flash',
   input: {schema: IdentifyImplicitCapabilitiesInputSchema},
   output: {schema: IdentifyImplicitCapabilitiesOutputSchema},
   prompt: `You are a Capability Expansion Agent, an AI designed to identify implicit potential from explicit capabilities.

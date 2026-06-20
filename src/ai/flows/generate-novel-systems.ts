@@ -45,6 +45,7 @@ export type GenerateNovelSystemsOutput = z.infer<typeof GenerateNovelSystemsOutp
  */
 const generateNovelSystemsPrompt = ai.definePrompt({
   name: 'generateNovelSystemsPrompt',
+  model: 'googleai/gemini-1.5-flash',
   input: { schema: GenerateNovelSystemsInputSchema },
   output: { schema: z.array(NovelSystemIdeaOutputSchema) },
   prompt: `You are an expert innovation lead tasked with generating novel system and project ideas by combining existing Micro Capability Pods (MCPs) and capabilities.
