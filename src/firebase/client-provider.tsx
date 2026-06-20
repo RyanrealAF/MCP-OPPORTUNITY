@@ -37,15 +37,15 @@ export const FirebaseClientProvider: React.FC<{
     }
   }, [isMounted]);
 
-  // If we haven't mounted yet, or config is invalid, we still wrap children 
-  // in the Provider with null values to avoid "useFirebase must be used within..." errors.
+  // If we haven't mounted yet, we still wrap children in the Provider with null values
+  // to prevent crashes during SSR, as hooks will handle the null state.
   return (
     <FirebaseProvider 
       firebaseApp={instances?.firebaseApp ?? null} 
       firestore={instances?.firestore ?? null} 
       auth={instances?.auth ?? null}
     >
-      {!isMounted ? <div className="h-screen bg-background" /> : children}
+      {children}
     </FirebaseProvider>
   );
 };
