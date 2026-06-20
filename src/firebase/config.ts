@@ -1,4 +1,3 @@
-
 /**
  * @fileOverview Firebase configuration for Project studio-8574497882-c7183.
  */

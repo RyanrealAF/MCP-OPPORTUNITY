@@ -1,4 +1,3 @@
-
 # BWB Code Assistant
 Industrial-grade ecosystem analyzer and code generation suite.
 
@@ -18,7 +17,8 @@ npx firebase login
 
 ### 3. Environment Setup
 Populate the `.env` file with your credentials from the Firebase Console and Google AI Studio (for Gemini API).
-- Target Project: `studio-8574497882-c7183`
+- **Target Project**: `studio-8574497882-c7183`
+- **Required**: `NEXT_PUBLIC_FIREBASE_API_KEY`, `GEMINI_API_KEY`
 
 ### 4. Build & Deploy
 Deploy the application to Firebase Hosting:
@@ -27,7 +27,7 @@ npm run deploy
 ```
 
 ## Features
-- **Capability Agent**: Extracts implicit expansion potential from MCP metadata.
-- **Collision Agent**: Simulates combinatorial collisions to discover novel system architectures.
+- **Capability Agent**: Extracts implicit expansion potential from node metadata.
+- **Collision Agent**: Simulates combinatorial collisions to discover novel systems.
 - **Intent Agent**: Maps technological gaps by referencing strategic objectives.
-- **Boilerplate Agent**: Generates industrial-grade TypeScript code for MCP implementations.
+- **Boilerplate Agent**: Generates production-ready TypeScript code.
