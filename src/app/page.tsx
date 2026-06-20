@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useMemo, useEffect } from 'react';
@@ -37,12 +38,15 @@ import { useToast } from '@/hooks/use-toast';
 import { useAuth, useUser, useFirestore, useCollection } from '@/firebase';
 import { collection, addDoc, serverTimestamp, query, orderBy } from 'firebase/firestore';
 import { GoogleAuthProvider, signInWithPopup, signOut } from 'firebase/auth';
+import { errorEmitter } from '@/firebase/error-emitter';
+import { FirestorePermissionError } from '@/firebase/errors';
 
 // AI Flow imports
 import { identifyImplicitCapabilities } from '@/ai/flows/identify-implicit-capabilities-flow';
 import { identifyMissingToolsForGoals } from '@/ai/flows/identify-missing-tools-for-goals';
 import { generateNovelSystems } from '@/ai/flows/generate-novel-systems';
 import { generateMcpBoilerplate } from '@/ai/flows/generate-mcp-boilerplate';
+import { MCP, Goal } from '@/lib/mcp-store';
 
 export default function BWBPage() {
   const { user, loading: authLoading } = useUser();
@@ -52,11 +56,15 @@ export default function BWBPage() {
 
   const [mounted, setMounted] = useState(false);
   const [currentTime, setCurrentTime] = useState<string>('');
-  const [selectedMcp, setSelectedMcp] = useState<any>(null);
+  const [selectedMcp, setSelectedMcp] = useState<MCP | null>(null);
 
   useEffect(() => {
     setMounted(true);
     setCurrentTime(new Date().toLocaleTimeString());
+    const interval = setInterval(() => {
+      setCurrentTime(new Date().toLocaleTimeString());
+    }, 1000);
+    return () => clearInterval(interval);
   }, []);
 
   const mcpsQuery = useMemo(() => {
@@ -69,8 +77,8 @@ export default function BWBPage() {
     return query(collection(db, 'users', user.uid, 'goals'), orderBy('updatedAt', 'desc'));
   }, [db, user]);
 
-  const { data: mcps = [] } = useCollection(mcpsQuery);
-  const { data: goals = [] } = useCollection(goalsQuery);
+  const { data: mcps = [] } = useCollection<MCP>(mcpsQuery);
+  const { data: goals = [] } = useCollection<Goal>(goalsQuery);
 
   const [registrySearch, setRegistrySearch] = useState('');
   
@@ -85,7 +93,7 @@ export default function BWBPage() {
   };
 
   const filteredMcps = useMemo(() => {
-    return mcps.filter((m: any) => 
+    return (mcps as MCP[]).filter((m) => 
       m.name.toLowerCase().includes(registrySearch.toLowerCase()) ||
       m.description.toLowerCase().includes(registrySearch.toLowerCase())
     );
@@ -163,7 +171,8 @@ export default function BWBPage() {
 
   const handleAddMcp = () => {
     if (!db || !user) return;
-    addDoc(collection(db, 'users', user.uid, 'mcps'), {
+    const path = `users/${user.uid}/mcps`;
+    const data = {
       name: 'New Capability Provider',
       description: 'A newly registered capability interface awaiting configuration.',
       explicitCapabilities: ['Interface Stub'],
@@ -171,16 +180,37 @@ export default function BWBPage() {
       version: '1.0.0',
       status: 'experimental',
       updatedAt: serverTimestamp()
-    });
+    };
+
+    addDoc(collection(db, path), data)
+      .catch(async (err) => {
+        const permissionError = new FirestorePermissionError({
+          path,
+          operation: 'create',
+          requestResourceData: data,
+        });
+        errorEmitter.emit('permission-error', permissionError);
+      });
   };
 
   const handleAddGoal = () => {
     if (!db || !user) return;
-    addDoc(collection(db, 'users', user.uid, 'goals'), {
+    const path = `users/${user.uid}/goals`;
+    const data = {
       title: 'New Strategic Objective',
       status: 'pending',
       updatedAt: serverTimestamp()
-    });
+    };
+
+    addDoc(collection(db, path), data)
+      .catch(async (err) => {
+        const permissionError = new FirestorePermissionError({
+          path,
+          operation: 'create',
+          requestResourceData: data,
+        });
+        errorEmitter.emit('permission-error', permissionError);
+      });
   };
 
   const handleSignIn = () => {
@@ -287,7 +317,7 @@ export default function BWBPage() {
           </div>
           <ScrollArea className="flex-1 p-2">
             <div className="space-y-1">
-              {filteredMcps.map((mcp: any) => (
+              {filteredMcps.map((mcp) => (
                 <div 
                   key={mcp.id} 
                   onClick={() => setSelectedMcp(mcp)}
@@ -324,7 +354,7 @@ export default function BWBPage() {
             </div>
             <ScrollArea className="flex-1">
               <div className="space-y-1">
-                {goals.map((goal: any) => (
+                {goals.map((goal) => (
                   <div key={goal.id} className="flex items-start gap-2 p-1.5 border border-border/50 bg-background/50">
                     <Target className="w-3 h-3 text-primary mt-0.5" />
                     <span className="text-[10px] text-foreground font-body leading-tight">{goal.title}</span>
