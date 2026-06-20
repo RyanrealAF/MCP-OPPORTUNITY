@@ -16,27 +16,19 @@ This is an industrial-grade ecosystem analyzer and code generation suite, design
 
 ## Deployment
 
-To deploy this application to Firebase Hosting (which supports Next.js Server Actions and AI flows), follow these steps:
+To deploy this application to Firebase Hosting:
 
-1. **Install Firebase CLI**:
-   ```bash
-   npm install -g firebase-tools
-   ```
+1. **Update Project ID**:
+   The project is already configured for `studio-8574497882-c7183`.
 
 2. **Login to Firebase**:
    ```bash
-   firebase login
+   npx firebase login
    ```
 
-3. **Initialize/Target Project**:
-   Update the `.firebaserc` file with your actual Firebase Project ID or run:
-   ```bash
-   firebase use --add
-   ```
-
-4. **Deploy**:
+3. **Deploy**:
    ```bash
    npm run deploy
    ```
 
-Note: Ensure your environment variables (`NEXT_PUBLIC_FIREBASE_API_KEY`, etc.) are configured in the Firebase Console under Hosting/App Hosting settings.
+Note: Ensure your environment variables are configured in the Firebase Console under Hosting/App Hosting settings for production functionality.
