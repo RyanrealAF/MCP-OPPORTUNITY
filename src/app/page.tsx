@@ -19,7 +19,9 @@ import {
   Zap,
   Code2,
   Copy,
-  CheckCircle2
+  CheckCircle2,
+  AlertTriangle,
+  Activity
 } from 'lucide-react';
 import { KnowledgeGraph } from '@/components/dashboard/KnowledgeGraph';
 import { AgentPanel } from '@/components/dashboard/AgentPanel';
@@ -95,6 +97,8 @@ export default function BWBPage() {
       const desc = mcps.map((m: any) => `${m.name}: ${m.description}`).join('\n');
       const result = await identifyImplicitCapabilities({ mcpDescriptions: desc });
       setCapResults(result);
+    } catch (e: any) {
+      toast({ title: "Analysis Failed", description: e.message, variant: "destructive" });
     } finally {
       toggleLoading('capability', false);
     }
@@ -111,6 +115,8 @@ export default function BWBPage() {
         contextOrConstraints: "Focus on industrial automation and developer experience"
       });
       setCollResults(result);
+    } catch (e: any) {
+      toast({ title: "Analysis Failed", description: e.message, variant: "destructive" });
     } finally {
       toggleLoading('collision', false);
     }
@@ -124,6 +130,8 @@ export default function BWBPage() {
         existingCapabilities: mcps.flatMap((m: any) => m.explicitCapabilities || [])
       });
       setIntentResults(result);
+    } catch (e: any) {
+      toast({ title: "Analysis Failed", description: e.message, variant: "destructive" });
     } finally {
       toggleLoading('intent', false);
     }
@@ -146,6 +154,8 @@ export default function BWBPage() {
         capabilities: selectedMcp.explicitCapabilities || []
       });
       setCodeResults(result);
+    } catch (e: any) {
+      toast({ title: "Generation Failed", description: e.message, variant: "destructive" });
     } finally {
       toggleLoading('code', false);
     }
@@ -500,7 +510,7 @@ export default function BWBPage() {
           <Separator orientation="vertical" className="h-3 opacity-30" />
           <div className="flex items-center gap-1">
             <Clock className="w-2 h-2" />
-            <span>LAST_SYNC: {currentTime || 'INITIALIZING...'}</span>
+            <span>LAST_SYNC: {currentTime}</span>
           </div>
         </div>
         <div className="flex items-center gap-4 text-[9px] font-code text-muted-foreground uppercase">
