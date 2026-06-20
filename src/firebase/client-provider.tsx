@@ -23,11 +23,11 @@ export const FirebaseClientProvider: React.FC<{
   const instances = useMemo(() => {
     // Only initialize on the client after mounting to avoid hydration mismatches
     if (!isMounted || typeof window === 'undefined') {
-      return null;
+      return { firebaseApp: null, firestore: null, auth: null };
     }
 
     if (!isFirebaseConfigValid()) {
-      return null;
+      return { firebaseApp: null, firestore: null, auth: null };
     }
 
     try {
@@ -37,16 +37,15 @@ export const FirebaseClientProvider: React.FC<{
       return { firebaseApp, firestore, auth };
     } catch (e) {
       console.error('Firebase initialization failed:', e);
-      return null;
+      return { firebaseApp: null, firestore: null, auth: null };
     }
   }, [isMounted]);
 
-  // We wrap children in the Provider. Hooks like useUser will handle null instances gracefully.
   return (
     <FirebaseProvider 
-      firebaseApp={instances?.firebaseApp ?? null} 
-      firestore={instances?.firestore ?? null} 
-      auth={instances?.auth ?? null}
+      firebaseApp={instances.firebaseApp} 
+      firestore={instances.firestore} 
+      auth={instances.auth}
     >
       {children}
     </FirebaseProvider>
