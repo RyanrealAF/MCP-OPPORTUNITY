@@ -1,3 +1,8 @@
+/**
+ * @fileOverview Type definitions for the MCP ecosystem data models.
+ * All mock initializations have been removed for production.
+ */
+
 export interface MCP {
   id: string;
   name: string;

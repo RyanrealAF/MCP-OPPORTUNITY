@@ -9,7 +9,7 @@ import { FirebaseProvider } from './provider';
 
 /**
  * FirebaseClientProvider handles the initialization of Firebase services
- * exclusively on the client side.
+ * exclusively on the client side after hydration.
  */
 export const FirebaseClientProvider: React.FC<{
   children: React.ReactNode;
@@ -21,8 +21,8 @@ export const FirebaseClientProvider: React.FC<{
   }, []);
 
   const instances = useMemo(() => {
-    // Defer initialization until we are on the client and have a valid config
-    if (typeof window === 'undefined' || !isFirebaseConfigValid()) {
+    // Only initialize on the client after mounting to avoid hydration mismatches
+    if (!isMounted || typeof window === 'undefined' || !isFirebaseConfigValid()) {
       return null;
     }
 
@@ -37,31 +37,28 @@ export const FirebaseClientProvider: React.FC<{
     }
   }, [isMounted]);
 
-  // If mounted but no instances, it means the config is missing or invalid
-  if (isMounted && !instances && isFirebaseConfigValid()) {
+  // If we haven't mounted yet, render a safe wrapper to avoid hydration errors
+  if (!isMounted) {
     return (
-      <div className="h-screen flex items-center justify-center bg-background p-6 text-center">
-        <div className="max-w-md space-y-4">
-          <h1 className="text-xl font-code text-destructive font-bold uppercase tracking-tighter">System Error: Initialization Failed</h1>
-          <p className="text-sm text-muted-foreground font-body">
-            Firebase failed to initialize. Check the console for more details.
-          </p>
-        </div>
-      </div>
+      <FirebaseProvider firebaseApp={null} firestore={null} auth={null}>
+        <div className="h-screen bg-background" />
+      </FirebaseProvider>
     );
   }
 
-  // If config is explicitly missing, show a specific error
-  if (isMounted && !isFirebaseConfigValid()) {
+  // If config is missing, show a non-crashing error state
+  if (!isFirebaseConfigValid()) {
     return (
-      <div className="h-screen flex items-center justify-center bg-background p-6 text-center">
-        <div className="max-w-md space-y-4">
-          <h1 className="text-xl font-code text-destructive font-bold uppercase tracking-tighter">System Error: Missing Credentials</h1>
-          <p className="text-sm text-muted-foreground font-body">
-            The Firebase configuration is missing. Please ensure NEXT_PUBLIC_FIREBASE_API_KEY and NEXT_PUBLIC_FIREBASE_PROJECT_ID are set.
-          </p>
+      <FirebaseProvider firebaseApp={null} firestore={null} auth={null}>
+        <div className="h-screen flex items-center justify-center bg-background p-6 text-center">
+          <div className="max-w-md space-y-4">
+            <h1 className="text-xl font-code text-primary font-bold uppercase tracking-tighter">System Offline: Credentials Required</h1>
+            <p className="text-xs text-muted-foreground font-body">
+              Please configure NEXT_PUBLIC_FIREBASE_API_KEY and NEXT_PUBLIC_FIREBASE_PROJECT_ID in your environment.
+            </p>
+          </div>
         </div>
-      </div>
+      </FirebaseProvider>
     );
   }
 
