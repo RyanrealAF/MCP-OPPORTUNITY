@@ -10,7 +10,8 @@
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
-    "deploy": "npm run build && firebase deploy --project studio-8574497882-c7183"
+    "deploy": "npm run build && firebase deploy --project studio-8574497882-c7183",
+    "test:ai": "tsx src/ai/tests/verify-flows.ts"
   },
   "dependencies": {
     "@genkit-ai/google-genai": "^1.28.0",
@@ -63,6 +64,7 @@
     "postcss": "^8",
     "tailwindcss": "^3.4.1",
     "typescript": "^5",
-    "firebase-tools": "^13.30.0"
+    "firebase-tools": "^13.30.0",
+    "tsx": "^4.19.2"
   }
 }
