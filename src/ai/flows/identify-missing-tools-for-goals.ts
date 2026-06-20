@@ -1,70 +1,38 @@
 'use server';
 /**
  * @fileOverview An AI agent that identifies missing tools or MCPs required to achieve strategic goals.
- *
- * - identifyMissingToolsForGoals - A function that handles the identification of missing tools for given goals.
- * - IdentifyMissingToolsForGoalsInput - The input type for the identifyMissingToolsForGoals function.
- * - IdentifyMissingToolsForGoalsOutput - The return type for the identifyMissingToolsForGoals function.
  */
 
 import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
 
 const IdentifyMissingToolsForGoalsInputSchema = z.object({
-  goals: z
-    .array(z.string())
-    .describe('A list of strategic goals that need to be achieved.'),
-  existingCapabilities: z
-    .array(z.string())
-    .describe(
-      'A list of existing capabilities or tools available in the ecosystem, derived from the MCP Knowledge Graph.'
-    ),
+  goals: z.array(z.string()).describe('Strategic goals.'),
+  existingCapabilities: z.array(z.string()).describe('Existing capabilities.'),
 });
-export type IdentifyMissingToolsForGoalsInput = z.infer<
-  typeof IdentifyMissingToolsForGoalsInputSchema
->;
+export type IdentifyMissingToolsForGoalsInput = z.infer<typeof IdentifyMissingToolsForGoalsInputSchema>;
 
 const IdentifyMissingToolsForGoalsOutputSchema = z.object({
-  missingTools: z
-    .array(z.string())
-    .describe('A list of specific tools or capabilities identified as missing to achieve the goals.'),
-  reasoning: z
-    .string()
-    .describe(
-      'A detailed explanation of why these tools are missing and how they would contribute to achieving the specified goals.'
-    ),
+  missingTools: z.array(z.string()).describe('Missing tools.'),
+  reasoning: z.string().describe('Explanation.'),
 });
-export type IdentifyMissingToolsForGoalsOutput = z.infer<
-  typeof IdentifyMissingToolsForGoalsOutputSchema
->;
-
-export async function identifyMissingToolsForGoals(
-  input: IdentifyMissingToolsForGoalsInput
-): Promise<IdentifyMissingToolsForGoalsOutput> {
-  return identifyMissingToolsForGoalsFlow(input);
-}
+export type IdentifyMissingToolsForGoalsOutput = z.infer<typeof IdentifyMissingToolsForGoalsOutputSchema>;
 
 const prompt = ai.definePrompt({
   name: 'identifyMissingToolsForGoalsPrompt',
   model: 'googleai/gemini-1.5-flash',
   input: {schema: IdentifyMissingToolsForGoalsInputSchema},
   output: {schema: IdentifyMissingToolsForGoalsOutputSchema},
-  prompt: `You are an expert strategic planner focused on identifying technological gaps within an ecosystem.
-Your task is to analyze a set of strategic goals and compare them against the available capabilities to determine what specific tools or Multi-Cloud Platforms (MCPs) are missing.
-
-### Strategic Goals:
+  prompt: `You are a gap analyst. Identify missing tools to achieve these goals:
+Goals:
 {{#each goals}}
 - {{{this}}}
 {{/each}}
 
-### Existing Capabilities:
+Existing:
 {{#each existingCapabilities}}
 - {{{this}}}
-{{/each}}
-
-Based on the above, identify the critical tools or capabilities that are absent but necessary to achieve the stated goals. For each missing item, provide a brief justification.
-
-Ensure your output directly matches the specified JSON schema for 'missingTools' and 'reasoning'.`,
+{{/each}}`,
 });
 
 const identifyMissingToolsForGoalsFlow = ai.defineFlow(
@@ -74,7 +42,19 @@ const identifyMissingToolsForGoalsFlow = ai.defineFlow(
     outputSchema: IdentifyMissingToolsForGoalsOutputSchema,
   },
   async input => {
-    const {output} = await prompt(input);
-    return output!;
+    try {
+      const {output} = await prompt(input);
+      if (!output) throw new Error('No output from gap analysis.');
+      return output;
+    } catch (error: any) {
+      console.error('Error in identifyMissingToolsForGoalsFlow:', error);
+      throw new Error(`Gap Analysis Failed: ${error.message}`);
+    }
   }
 );
+
+export async function identifyMissingToolsForGoals(
+  input: IdentifyMissingToolsForGoalsInput
+): Promise<IdentifyMissingToolsForGoalsOutput> {
+  return identifyMissingToolsForGoalsFlow(input);
+}

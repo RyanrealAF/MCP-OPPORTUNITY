@@ -39,12 +39,6 @@ export type IdentifyImplicitCapabilitiesOutput = z.infer<
   typeof IdentifyImplicitCapabilitiesOutputSchema
 >;
 
-export async function identifyImplicitCapabilities(
-  input: IdentifyImplicitCapabilitiesInput
-): Promise<IdentifyImplicitCapabilitiesOutput> {
-  return identifyImplicitCapabilitiesFlow(input);
-}
-
 const prompt = ai.definePrompt({
   name: 'identifyImplicitCapabilitiesPrompt',
   model: 'googleai/gemini-1.5-flash',
@@ -67,7 +61,19 @@ const identifyImplicitCapabilitiesFlow = ai.defineFlow(
     outputSchema: IdentifyImplicitCapabilitiesOutputSchema,
   },
   async input => {
-    const {output} = await prompt(input);
-    return output!;
+    try {
+      const {output} = await prompt(input);
+      if (!output) throw new Error('No output generated from AI model.');
+      return output;
+    } catch (error: any) {
+      console.error('Error in identifyImplicitCapabilitiesFlow:', error);
+      throw new Error(`AI Analysis Failed: ${error.message}`);
+    }
   }
 );
+
+export async function identifyImplicitCapabilities(
+  input: IdentifyImplicitCapabilitiesInput
+): Promise<IdentifyImplicitCapabilitiesOutput> {
+  return identifyImplicitCapabilitiesFlow(input);
+}
