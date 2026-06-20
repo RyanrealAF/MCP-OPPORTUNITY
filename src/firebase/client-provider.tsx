@@ -22,7 +22,11 @@ export const FirebaseClientProvider: React.FC<{
 
   const instances = useMemo(() => {
     // Only initialize on the client after mounting to avoid hydration mismatches
-    if (!isMounted || typeof window === 'undefined' || !isFirebaseConfigValid()) {
+    if (!isMounted || typeof window === 'undefined') {
+      return null;
+    }
+
+    if (!isFirebaseConfigValid()) {
       return null;
     }
 
@@ -37,8 +41,7 @@ export const FirebaseClientProvider: React.FC<{
     }
   }, [isMounted]);
 
-  // If we haven't mounted yet, we still wrap children in the Provider with null values
-  // to prevent crashes during SSR, as hooks will handle the null state.
+  // We wrap children in the Provider. Hooks like useUser will handle null instances gracefully.
   return (
     <FirebaseProvider 
       firebaseApp={instances?.firebaseApp ?? null} 
