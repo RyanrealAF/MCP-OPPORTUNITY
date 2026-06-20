@@ -17,7 +17,7 @@ export const KnowledgeGraph: React.FC<KnowledgeGraphProps> = ({ mcps }) => {
   if (!mounted) {
     return (
       <div className="relative w-full h-[300px] industrial-panel overflow-hidden bg-background/80 flex items-center justify-center">
-        <div className="text-[10px] font-code text-muted-foreground animate-pulse uppercase tracking-[0.2em]">Initialising Graph...</div>
+        <div className="text-[10px] font-code text-muted-foreground animate-pulse uppercase tracking-[0.2em]">Initialising Visualization...</div>
       </div>
     );
   }
@@ -33,11 +33,9 @@ export const KnowledgeGraph: React.FC<KnowledgeGraphProps> = ({ mcps }) => {
           </marker>
         </defs>
 
-        {/* Central Core Node */}
         <circle cx="400" cy="200" r="40" className="fill-background stroke-primary stroke-[0.5px]" />
-        <text x="400" y="200" textAnchor="middle" dominantBaseline="middle" className="fill-primary font-code text-[10px] uppercase">Core Graph</text>
+        <text x="400" y="200" textAnchor="middle" dominantBaseline="middle" className="fill-primary font-code text-[10px] uppercase">Ecosystem Core</text>
 
-        {/* MCP Nodes and Connections */}
         {mcps.map((mcp, idx) => {
           const angle = (idx / mcps.length) * 2 * Math.PI;
           const x = 400 + 200 * Math.cos(angle);
@@ -79,7 +77,7 @@ export const KnowledgeGraph: React.FC<KnowledgeGraphProps> = ({ mcps }) => {
 
       <div className="absolute top-2 left-2 flex items-center gap-2">
         <div className="w-1.5 h-1.5 bg-primary animate-pulse" />
-        <span className="text-[10px] font-code text-primary uppercase tracking-widest">Live Node Map v4.1.2</span>
+        <span className="text-[10px] font-code text-primary uppercase tracking-widest">Active Node Map</span>
       </div>
     </div>
   );

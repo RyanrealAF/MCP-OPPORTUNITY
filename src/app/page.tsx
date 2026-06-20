@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useMemo, useEffect } from 'react';
@@ -21,8 +20,7 @@ import {
   Code2,
   Copy,
   CheckCircle2,
-  AlertTriangle,
-  Activity
+  AlertTriangle
 } from 'lucide-react';
 import { KnowledgeGraph } from '@/components/dashboard/KnowledgeGraph';
 import { AgentPanel } from '@/components/dashboard/AgentPanel';
@@ -34,14 +32,12 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 
-// Firebase hooks
 import { useAuth, useUser, useFirestore, useCollection } from '@/firebase';
 import { collection, addDoc, serverTimestamp, query, orderBy } from 'firebase/firestore';
 import { GoogleAuthProvider, signInWithPopup, signOut } from 'firebase/auth';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
 
-// AI Flow imports
 import { identifyImplicitCapabilities } from '@/ai/flows/identify-implicit-capabilities-flow';
 import { identifyMissingToolsForGoals } from '@/ai/flows/identify-missing-tools-for-goals';
 import { generateNovelSystems } from '@/ai/flows/generate-novel-systems';
@@ -234,7 +230,7 @@ export default function BWBPage() {
   if (authLoading || !mounted) {
     return (
       <div className="h-screen flex items-center justify-center bg-background">
-        <div className="animate-pulse font-code text-primary">INITIALIZING_SECURE_KERNEL...</div>
+        <div className="animate-pulse font-code text-primary">INITIALIZING_APPLICATION_CORE...</div>
       </div>
     );
   }
@@ -273,7 +269,6 @@ export default function BWBPage() {
           <Separator orientation="vertical" className="h-6 mx-2 opacity-50" />
           <nav className="flex items-center gap-1">
             <Button variant="ghost" size="sm" className="h-8 text-[11px] font-code uppercase text-primary bg-primary/10 rounded-none border-b-2 border-primary">Dashboard</Button>
-            <Button variant="ghost" size="sm" className="h-8 text-[11px] font-code uppercase text-muted-foreground hover:text-foreground rounded-none">Registry</Button>
           </nav>
         </div>
         <div className="flex items-center gap-6">
@@ -284,7 +279,7 @@ export default function BWBPage() {
             </div>
             <div className="text-right">
               <div className="text-[9px] font-code text-muted-foreground uppercase leading-none">Active Goals</div>
-              <div className="text-xs font-code text-primary leading-none">{goals.length} Processing</div>
+              <div className="text-xs font-code text-primary leading-none">{goals.length} Active</div>
             </div>
           </div>
           <Button variant="outline" size="icon" className="h-8 w-8 rounded-none border-border">
@@ -535,7 +530,7 @@ export default function BWBPage() {
         <div className="flex items-center gap-4 text-[9px] font-code text-muted-foreground">
           <div className="flex items-center gap-1">
             <div className="w-1.5 h-1.5 bg-green-500 rounded-full shadow-[0_0_5px_rgba(34,197,94,0.5)]" />
-            <span>ASSISTANT_READY</span>
+            <span>CORE_SYNCED</span>
           </div>
           <Separator orientation="vertical" className="h-3 opacity-30" />
           <div className="flex items-center gap-1">
