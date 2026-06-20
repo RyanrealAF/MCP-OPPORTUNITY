@@ -37,38 +37,15 @@ export const FirebaseClientProvider: React.FC<{
     }
   }, [isMounted]);
 
-  // If we haven't mounted yet, render a safe wrapper to avoid hydration errors
-  if (!isMounted) {
-    return (
-      <FirebaseProvider firebaseApp={null} firestore={null} auth={null}>
-        <div className="h-screen bg-background" />
-      </FirebaseProvider>
-    );
-  }
-
-  // If config is missing, show a non-crashing error state
-  if (!isFirebaseConfigValid()) {
-    return (
-      <FirebaseProvider firebaseApp={null} firestore={null} auth={null}>
-        <div className="h-screen flex items-center justify-center bg-background p-6 text-center">
-          <div className="max-w-md space-y-4">
-            <h1 className="text-xl font-code text-primary font-bold uppercase tracking-tighter">System Offline: Credentials Required</h1>
-            <p className="text-xs text-muted-foreground font-body">
-              Please configure NEXT_PUBLIC_FIREBASE_API_KEY and NEXT_PUBLIC_FIREBASE_PROJECT_ID in your environment.
-            </p>
-          </div>
-        </div>
-      </FirebaseProvider>
-    );
-  }
-
+  // If we haven't mounted yet, or config is invalid, we still wrap children 
+  // in the Provider with null values to avoid "useFirebase must be used within..." errors.
   return (
     <FirebaseProvider 
       firebaseApp={instances?.firebaseApp ?? null} 
       firestore={instances?.firestore ?? null} 
       auth={instances?.auth ?? null}
     >
-      {children}
+      {!isMounted ? <div className="h-screen bg-background" /> : children}
     </FirebaseProvider>
   );
 };

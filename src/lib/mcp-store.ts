@@ -11,10 +11,12 @@ export interface MCP {
   implicitCapabilities: { name: string; description: string }[];
   version: string;
   status: 'active' | 'deprecated' | 'experimental';
+  updatedAt?: any;
 }
 
 export interface Goal {
   id: string;
   title: string;
   status: 'pending' | 'analyzing' | 'complete';
+  updatedAt?: any;
 }
