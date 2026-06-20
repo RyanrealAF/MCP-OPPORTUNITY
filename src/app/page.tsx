@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useMemo, useEffect } from 'react';
@@ -35,7 +34,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 
 import { useAuth, useUser, useFirestore, useCollection } from '@/firebase';
-import { collection, addDoc, serverTimestamp, query, orderBy, limit } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp, query, orderBy, limit, Timestamp } from 'firebase/firestore';
 import { GoogleAuthProvider, signInWithPopup, signOut } from 'firebase/auth';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
@@ -263,6 +262,13 @@ export default function BWBPage() {
       title: "Success",
       description: "Code copied to clipboard.",
     });
+  };
+
+  const formatTimestamp = (ts: any) => {
+    if (!ts) return 'Recent';
+    if (ts instanceof Timestamp) return ts.toDate().toLocaleTimeString();
+    if (ts?.toDate) return ts.toDate().toLocaleTimeString();
+    return 'Recent';
   };
 
   if (authLoading || !mounted) {
@@ -587,7 +593,7 @@ export default function BWBPage() {
                       <div key={sim.id} className="industrial-panel p-2 bg-muted/5 hover:bg-muted/10 transition-colors cursor-pointer group">
                         <div className="flex items-center justify-between mb-1">
                           <span className="text-[8px] font-code text-muted-foreground uppercase leading-none">
-                            {sim.timestamp?.toDate ? sim.timestamp.toDate().toLocaleTimeString() : 'Recent'}
+                            {formatTimestamp(sim.timestamp)}
                           </span>
                           <span className="text-[8px] font-code text-primary leading-none uppercase">{sim.results?.length || 0} Concepts</span>
                         </div>

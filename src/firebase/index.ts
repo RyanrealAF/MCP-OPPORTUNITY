@@ -3,19 +3,31 @@
 import { initializeApp, getApps, getApp, FirebaseApp } from 'firebase/app';
 import { getAuth, Auth } from 'firebase/auth';
 import { getFirestore, Firestore } from 'firebase/firestore';
-import { firebaseConfig } from './config';
+import { firebaseConfig, isFirebaseConfigValid } from './config';
 
+/**
+ * Initializes Firebase services safely.
+ * Only intended for client-side usage via the client provider.
+ */
 export function initializeFirebase(): {
-  firebaseApp: FirebaseApp;
-  firestore: Firestore;
-  auth: Auth;
+  firebaseApp: FirebaseApp | null;
+  firestore: Firestore | null;
+  auth: Auth | null;
 } {
-  const firebaseApp =
-    getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
-  const auth = getAuth(firebaseApp);
-  const firestore = getFirestore(firebaseApp);
+  if (typeof window === 'undefined' || !isFirebaseConfigValid()) {
+    return { firebaseApp: null, firestore: null, auth: null };
+  }
 
-  return { firebaseApp, firestore, auth };
+  try {
+    const firebaseApp = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
+    const auth = getAuth(firebaseApp);
+    const firestore = getFirestore(firebaseApp);
+
+    return { firebaseApp, firestore, auth };
+  } catch (error) {
+    console.error('Firebase Initialization Error:', error);
+    return { firebaseApp: null, firestore: null, auth: null };
+  }
 }
 
 export * from './provider';
