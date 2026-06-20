@@ -7,7 +7,6 @@ import {
   Cpu, 
   GitBranch, 
   Target, 
-  AlertTriangle,
   LayoutGrid,
   FileSearch,
   Settings2,
@@ -17,7 +16,10 @@ import {
   LogOut,
   Clock,
   ShieldCheck,
-  Zap
+  Zap,
+  Code2,
+  Copy,
+  CheckCircle2
 } from 'lucide-react';
 import { KnowledgeGraph } from '@/components/dashboard/KnowledgeGraph';
 import { AgentPanel } from '@/components/dashboard/AgentPanel';
@@ -27,6 +29,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
+import { useToast } from '@/hooks/use-toast';
 
 // Firebase hooks
 import { useAuth, useUser, useFirestore, useCollection } from '@/firebase';
@@ -37,22 +40,23 @@ import { GoogleAuthProvider, signInWithPopup, signOut } from 'firebase/auth';
 import { identifyImplicitCapabilities } from '@/ai/flows/identify-implicit-capabilities-flow';
 import { identifyMissingToolsForGoals } from '@/ai/flows/identify-missing-tools-for-goals';
 import { generateNovelSystems } from '@/ai/flows/generate-novel-systems';
+import { generateMcpBoilerplate } from '@/ai/flows/generate-mcp-boilerplate';
 
-export default function MOEPage() {
+export default function BWBPage() {
   const { user, loading: authLoading } = useUser();
   const auth = useAuth();
   const db = useFirestore();
+  const { toast } = useToast();
 
-  // Hydration protection
   const [mounted, setMounted] = useState(false);
   const [currentTime, setCurrentTime] = useState<string>('');
+  const [selectedMcp, setSelectedMcp] = useState<any>(null);
 
   useEffect(() => {
     setMounted(true);
     setCurrentTime(new Date().toLocaleTimeString());
   }, []);
 
-  // Firestore Collections
   const mcpsQuery = useMemo(() => {
     if (!db || !user) return null;
     return query(collection(db, 'users', user.uid, 'mcps'), orderBy('updatedAt', 'desc'));
@@ -68,10 +72,10 @@ export default function MOEPage() {
 
   const [registrySearch, setRegistrySearch] = useState('');
   
-  // Agent states
   const [capResults, setCapResults] = useState<any>(null);
   const [collResults, setCollResults] = useState<any>(null);
   const [intentResults, setIntentResults] = useState<any>(null);
+  const [codeResults, setCodeResults] = useState<any>(null);
   const [loadingStates, setLoadingStates] = useState<Record<string, boolean>>({});
 
   const toggleLoading = (agent: string, state: boolean) => {
@@ -125,6 +129,28 @@ export default function MOEPage() {
     }
   };
 
+  const runCodeAgent = async () => {
+    if (!selectedMcp) {
+      toast({
+        title: "Action Required",
+        description: "Select an MCP from the registry to generate boilerplate code.",
+        variant: "destructive"
+      });
+      return;
+    }
+    toggleLoading('code', true);
+    try {
+      const result = await generateMcpBoilerplate({
+        name: selectedMcp.name,
+        description: selectedMcp.description,
+        capabilities: selectedMcp.explicitCapabilities || []
+      });
+      setCodeResults(result);
+    } finally {
+      toggleLoading('code', false);
+    }
+  };
+
   const handleAddMcp = () => {
     if (!db || !user) return;
     addDoc(collection(db, 'users', user.uid, 'mcps'), {
@@ -157,6 +183,14 @@ export default function MOEPage() {
     signOut(auth);
   };
 
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
+    toast({
+      title: "Success",
+      description: "Code copied to clipboard.",
+    });
+  };
+
   if (authLoading || !mounted) {
     return (
       <div className="h-screen flex items-center justify-center bg-background">
@@ -174,8 +208,8 @@ export default function MOEPage() {
               <ShieldCheck className="w-8 h-8 text-primary" />
             </div>
             <div className="text-center">
-              <h1 className="font-code text-xl font-bold text-primary mb-2 tracking-tighter uppercase">MOE // ACCESS_DENIED</h1>
-              <p className="text-sm text-muted-foreground font-body">Authentication required to interface with Ecosystem Opportunity Engine.</p>
+              <h1 className="font-code text-xl font-bold text-primary mb-2 tracking-tighter uppercase">BWB // CODE-ASSISTANT</h1>
+              <p className="text-sm text-muted-foreground font-body">Authentication required to interface with code generation engine.</p>
             </div>
             <Button onClick={handleSignIn} className="w-full font-code uppercase tracking-widest rounded-none h-12">
               Authorize with Google
@@ -188,14 +222,13 @@ export default function MOEPage() {
 
   return (
     <div className="flex flex-col h-screen bg-background font-body select-none overflow-hidden text-foreground">
-      {/* Top Header Layer */}
       <header className="h-12 border-b border-border bg-card flex items-center px-4 justify-between shrink-0">
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2">
             <div className="w-5 h-5 bg-primary flex items-center justify-center">
-              <Terminal className="w-3.5 h-3.5 text-background" />
+              <Code2 className="w-3.5 h-3.5 text-background" />
             </div>
-            <h1 className="font-code text-sm font-bold tracking-tighter uppercase text-primary">MOE // OP-ENGINE</h1>
+            <h1 className="font-code text-sm font-bold tracking-tighter uppercase text-primary">BWB // CODE-ASSISTANT</h1>
           </div>
           <Separator orientation="vertical" className="h-6 mx-2 opacity-50" />
           <nav className="flex items-center gap-1">
@@ -220,10 +253,7 @@ export default function MOEPage() {
         </div>
       </header>
 
-      {/* Main Workspace */}
       <main className="flex-1 flex overflow-hidden">
-        
-        {/* Left Column: Core Registry */}
         <div className="w-[320px] border-r border-border flex flex-col shrink-0 bg-muted/10">
           <div className="p-3 bg-muted/20 border-b border-border flex flex-col gap-2">
             <div className="flex items-center justify-between">
@@ -248,7 +278,11 @@ export default function MOEPage() {
           <ScrollArea className="flex-1 p-2">
             <div className="space-y-1">
               {filteredMcps.map((mcp: any) => (
-                <div key={mcp.id} className="industrial-panel p-2 mb-2 group hover:border-primary/50 transition-colors cursor-pointer">
+                <div 
+                  key={mcp.id} 
+                  onClick={() => setSelectedMcp(mcp)}
+                  className={`industrial-panel p-2 mb-2 group transition-colors cursor-pointer ${selectedMcp?.id === mcp.id ? 'border-primary bg-primary/5' : 'hover:border-primary/50'}`}
+                >
                   <div className="flex items-center justify-between mb-1">
                     <span className="text-[10px] font-code text-muted-foreground uppercase tracking-widest">{mcp.id?.slice(-6)}</span>
                     <Badge variant={mcp.status === 'active' ? 'secondary' : 'outline'} className="text-[8px] h-3 px-1 rounded-none border-border uppercase">
@@ -271,7 +305,7 @@ export default function MOEPage() {
             </div>
           </ScrollArea>
           
-          <div className="p-3 border-t border-border bg-muted/20 max-h-[250px] overflow-hidden flex flex-col">
+          <div className="p-3 border-t border-border bg-muted/20 max-h-[200px] overflow-hidden flex flex-col">
             <div className="flex items-center justify-between mb-2">
               <div className="text-[9px] font-code text-muted-foreground uppercase">Strategic Goals</div>
               <Button onClick={handleAddGoal} variant="ghost" size="icon" className="h-5 w-5 text-primary">
@@ -290,7 +324,6 @@ export default function MOEPage() {
             </ScrollArea>
           </div>
 
-          {/* User Sign Out Section */}
           <div className="p-3 border-t border-border bg-card">
             <Button 
               variant="destructive" 
@@ -304,7 +337,6 @@ export default function MOEPage() {
           </div>
         </div>
 
-        {/* Center Column: Experience Layer */}
         <div className="flex-1 flex flex-col bg-background relative">
           <div className="p-3 flex-1 flex flex-col min-h-0 overflow-hidden">
             <div className="flex items-center justify-between mb-2">
@@ -312,12 +344,17 @@ export default function MOEPage() {
                 <LayoutGrid className="w-3.5 h-3.5" />
                 <span>Ecosystem Visualization</span>
               </div>
+              {selectedMcp && (
+                <div className="text-[10px] font-code text-primary flex items-center gap-2">
+                  <CheckCircle2 className="w-3 h-3" />
+                  <span>TARGET_SELECTED: {selectedMcp.name.toUpperCase()}</span>
+                </div>
+              )}
             </div>
             
             <div className="flex-1 relative flex flex-col gap-3 overflow-hidden">
               <KnowledgeGraph mcps={mcps} />
               
-              {/* Intelligence Feed */}
               <div className="flex-1 industrial-panel bg-muted/5 flex flex-col overflow-hidden">
                 <div className="p-2 border-b border-border bg-muted/20 flex items-center gap-2 text-[10px] font-code uppercase text-muted-foreground">
                   <FileSearch className="w-3 h-3" />
@@ -325,13 +362,33 @@ export default function MOEPage() {
                 </div>
                 <ScrollArea className="flex-1 p-3">
                   <div className="space-y-4">
-                    {!capResults && !collResults && !intentResults && (
+                    {!capResults && !collResults && !intentResults && !codeResults && (
                       <div className="flex flex-col items-center justify-center h-48 opacity-20 text-center">
                         <Terminal className="w-8 h-8 mb-2" />
                         <p className="font-code text-xs tracking-[0.5em]">AWAITING_INPUT_STREAM</p>
                       </div>
                     )}
                     
+                    {codeResults && (
+                      <div className="border-l-2 border-primary pl-3 py-1 bg-primary/5 mb-4">
+                        <div className="flex items-center justify-between mb-2">
+                          <h4 className="text-[11px] font-code uppercase text-primary">Boilerplate Generation</h4>
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            className="h-6 w-6 text-primary"
+                            onClick={() => copyToClipboard(codeResults.code)}
+                          >
+                            <Copy className="w-3.5 h-3.5" />
+                          </Button>
+                        </div>
+                        <div className="bg-background border border-border p-3 font-code text-[10px] overflow-x-auto whitespace-pre">
+                          {codeResults.code}
+                        </div>
+                        <p className="mt-2 text-[10px] text-muted-foreground italic">{codeResults.explanation}</p>
+                      </div>
+                    )}
+
                     {capResults && (
                       <div className="border-l-2 border-primary pl-3 py-1 bg-primary/5 mb-4">
                         <h4 className="text-[11px] font-code uppercase text-primary mb-1">Capability Expansion</h4>
@@ -391,7 +448,6 @@ export default function MOEPage() {
           </div>
         </div>
 
-        {/* Right Column: Agents */}
         <div className="w-[300px] border-l border-border flex flex-col shrink-0 bg-muted/10">
           <div className="p-3 bg-muted/20 border-b border-border">
             <div className="flex items-center gap-2 text-[11px] font-code uppercase text-muted-foreground">
@@ -422,17 +478,24 @@ export default function MOEPage() {
                 onExecute={runIntentAgent}
                 loading={loadingStates['intent']}
               />
+              <Separator className="my-2 bg-border/50" />
+              <AgentPanel 
+                name="Boilerplate Agent"
+                icon={<Code2 className="w-3.5 h-3.5" />}
+                description="Generates production-ready TypeScript boilerplate for a selected MCP node."
+                onExecute={runCodeAgent}
+                loading={loadingStates['code']}
+              />
             </div>
           </ScrollArea>
         </div>
       </main>
 
-      {/* Footer Status Bar */}
       <footer className="h-6 border-t border-border bg-muted/30 px-3 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-4 text-[9px] font-code text-muted-foreground">
           <div className="flex items-center gap-1">
             <div className="w-1.5 h-1.5 bg-green-500 rounded-full shadow-[0_0_5px_rgba(34,197,94,0.5)]" />
-            <span>ECOSYSTEM_CONNECTED</span>
+            <span>ASSISTANT_READY</span>
           </div>
           <Separator orientation="vertical" className="h-3 opacity-30" />
           <div className="flex items-center gap-1">

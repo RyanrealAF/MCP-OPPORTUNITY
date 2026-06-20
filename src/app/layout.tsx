@@ -3,8 +3,8 @@ import './globals.css';
 import { FirebaseClientProvider } from '@/firebase';
 
 export const metadata: Metadata = {
-  title: 'MOE | MCP Opportunity Engine',
-  description: 'Industrial-grade MCP capability and collision analyzer',
+  title: 'BWB | Code Assistant',
+  description: 'Industrial-grade MCP capability analyzer and code generation suite',
 };
 
 export default function RootLayout({
