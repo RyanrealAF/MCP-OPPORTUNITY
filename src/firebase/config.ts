@@ -1,8 +1,7 @@
 /**
- * Firebase configuration object.
- * Values are loaded from environment variables prefixed with NEXT_PUBLIC_
- * for client-side access in Next.js.
+ * @fileOverview Firebase configuration for Project studio-8574497882-c7183.
  */
+
 export const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || "",
   authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || "studio-8574497882-c7183.firebaseapp.com",

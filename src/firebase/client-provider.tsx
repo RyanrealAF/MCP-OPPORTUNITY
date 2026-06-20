@@ -8,8 +8,9 @@ import { firebaseConfig, isFirebaseConfigValid } from './config';
 import { FirebaseProvider } from './provider';
 
 /**
- * FirebaseClientProvider handles the initialization of Firebase services
- * exclusively on the client side after hydration.
+ * FirebaseClientProvider handles the initialization of Firebase services.
+ * It ensures the provider is always present to avoid hydration errors,
+ * even if services are null before client-side mount.
  */
 export const FirebaseClientProvider: React.FC<{
   children: React.ReactNode;
@@ -21,12 +22,8 @@ export const FirebaseClientProvider: React.FC<{
   }, []);
 
   const instances = useMemo(() => {
-    // Only initialize on the client after mounting to avoid hydration mismatches
-    if (!isMounted || typeof window === 'undefined') {
-      return { firebaseApp: null, firestore: null, auth: null };
-    }
-
-    if (!isFirebaseConfigValid()) {
+    // Return nulls during SSR or before validation
+    if (!isMounted || typeof window === 'undefined' || !isFirebaseConfigValid()) {
       return { firebaseApp: null, firestore: null, auth: null };
     }
 
@@ -36,7 +33,7 @@ export const FirebaseClientProvider: React.FC<{
       const auth = getAuth(firebaseApp);
       return { firebaseApp, firestore, auth };
     } catch (e) {
-      console.error('Firebase initialization failed:', e);
+      // Fail gracefully and return nulls
       return { firebaseApp: null, firestore: null, auth: null };
     }
   }, [isMounted]);

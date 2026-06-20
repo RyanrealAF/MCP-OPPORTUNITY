@@ -13,8 +13,12 @@ interface FirebaseContextProps {
   auth: Auth | null;
 }
 
-// Default value must be defined to avoid hydration errors if hooks are called before mounting
-const FirebaseContext = createContext<FirebaseContextProps | undefined>(undefined);
+// Initialized with a default empty object instead of undefined to prevent hydration crashes
+const FirebaseContext = createContext<FirebaseContextProps>({
+  firebaseApp: null,
+  firestore: null,
+  auth: null
+});
 
 export const FirebaseProvider: React.FC<{
   children: React.ReactNode;
@@ -33,7 +37,7 @@ export const FirebaseProvider: React.FC<{
 
 export const useFirebase = () => {
   const context = useContext(FirebaseContext);
-  if (context === undefined) {
+  if (!context) {
     throw new Error('useFirebase must be used within a FirebaseProvider');
   }
   return context;
