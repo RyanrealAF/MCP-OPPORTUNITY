@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useMemo, useEffect } from 'react';
@@ -20,7 +21,8 @@ import {
   Code2,
   Copy,
   CheckCircle2,
-  AlertTriangle
+  AlertTriangle,
+  History
 } from 'lucide-react';
 import { KnowledgeGraph } from '@/components/dashboard/KnowledgeGraph';
 import { AgentPanel } from '@/components/dashboard/AgentPanel';
@@ -33,7 +35,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 
 import { useAuth, useUser, useFirestore, useCollection } from '@/firebase';
-import { collection, addDoc, serverTimestamp, query, orderBy } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp, query, orderBy, limit } from 'firebase/firestore';
 import { GoogleAuthProvider, signInWithPopup, signOut } from 'firebase/auth';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
@@ -42,7 +44,7 @@ import { identifyImplicitCapabilities } from '@/ai/flows/identify-implicit-capab
 import { identifyMissingToolsForGoals } from '@/ai/flows/identify-missing-tools-for-goals';
 import { generateNovelSystems } from '@/ai/flows/generate-novel-systems';
 import { generateMcpBoilerplate } from '@/ai/flows/generate-mcp-boilerplate';
-import { MCP, Goal } from '@/lib/mcp-store';
+import { MCP, Goal, Simulation } from '@/lib/mcp-store';
 
 export default function BWBPage() {
   const { user, loading: authLoading } = useUser();
@@ -73,8 +75,14 @@ export default function BWBPage() {
     return query(collection(db, 'users', user.uid, 'goals'), orderBy('updatedAt', 'desc'));
   }, [db, user]);
 
+  const simQuery = useMemo(() => {
+    if (!db || !user) return null;
+    return query(collection(db, 'users', user.uid, 'simulations'), orderBy('timestamp', 'desc'), limit(5));
+  }, [db, user]);
+
   const { data: mcps = [] } = useCollection<MCP>(mcpsQuery);
   const { data: goals = [] } = useCollection<Goal>(goalsQuery);
+  const { data: simulations = [] } = useCollection<Simulation>(simQuery);
 
   const [registrySearch, setRegistrySearch] = useState('');
   
@@ -89,10 +97,12 @@ export default function BWBPage() {
   };
 
   const filteredMcps = useMemo(() => {
-    return (mcps as MCP[]).filter((m) => 
-      m.name.toLowerCase().includes(registrySearch.toLowerCase()) ||
-      m.description.toLowerCase().includes(registrySearch.toLowerCase())
-    );
+    return (mcps as MCP[]).filter((m) => {
+      const search = registrySearch.toLowerCase();
+      const nameMatch = (m.name || '').toLowerCase().includes(search);
+      const descMatch = (m.description || '').toLowerCase().includes(search);
+      return nameMatch || descMatch;
+    });
   }, [mcps, registrySearch]);
 
   const runCapabilityAgent = async () => {
@@ -102,7 +112,7 @@ export default function BWBPage() {
     }
     toggleLoading('capability', true);
     try {
-      const desc = mcps.map((m: any) => `${m.name}: ${m.description}`).join('\n');
+      const desc = mcps.map((m: any) => `${m.name || 'Unnamed'}: ${m.description || 'No description'}`).join('\n');
       const result = await identifyImplicitCapabilities({ mcpDescriptions: desc });
       setCapResults(result);
     } catch (e: any) {
@@ -119,7 +129,7 @@ export default function BWBPage() {
     }
     toggleLoading('collision', true);
     try {
-      const mcpDescs = mcps.map((m: any) => m.description);
+      const mcpDescs = mcps.map((m: any) => m.description || 'No description');
       const capDescs = mcps.flatMap((m: any) => m.explicitCapabilities || []);
       const result = await generateNovelSystems({ 
         mcpDescriptions: mcpDescs,
@@ -127,6 +137,22 @@ export default function BWBPage() {
         contextOrConstraints: "Focus on industrial automation and developer experience"
       });
       setCollResults(result);
+      
+      if (db && user) {
+        const path = `users/${user.uid}/simulations`;
+        const simData = {
+          timestamp: serverTimestamp(),
+          results: result.novelSystems
+        };
+        addDoc(collection(db, path), simData).catch(async () => {
+          const permissionError = new FirestorePermissionError({
+            path,
+            operation: 'create',
+            requestResourceData: simData,
+          });
+          errorEmitter.emit('permission-error', permissionError);
+        });
+      }
     } catch (e: any) {
       toast({ title: "Analysis Failed", description: e.message, variant: "destructive" });
     } finally {
@@ -142,7 +168,7 @@ export default function BWBPage() {
     toggleLoading('intent', true);
     try {
       const result = await identifyMissingToolsForGoals({
-        goals: goals.map((g: any) => g.title),
+        goals: goals.map((g: any) => g.title || 'Untitled Goal'),
         existingCapabilities: mcps.flatMap((m: any) => m.explicitCapabilities || [])
       });
       setIntentResults(result);
@@ -165,8 +191,8 @@ export default function BWBPage() {
     toggleLoading('code', true);
     try {
       const result = await generateMcpBoilerplate({
-        name: selectedMcp.name,
-        description: selectedMcp.description,
+        name: selectedMcp.name || 'UnnamedProvider',
+        description: selectedMcp.description || 'No description provided',
         capabilities: selectedMcp.explicitCapabilities || []
       });
       setCodeResults(result);
@@ -342,9 +368,9 @@ export default function BWBPage() {
                         {mcp.status}
                       </Badge>
                     </div>
-                    <h3 className="text-sm font-bold text-foreground mb-1 font-headline truncate uppercase tracking-tighter">{mcp.name}</h3>
+                    <h3 className="text-sm font-bold text-foreground mb-1 font-headline truncate uppercase tracking-tighter">{mcp.name || 'UNNAMED'}</h3>
                     <p className="text-[11px] text-muted-foreground line-clamp-2 font-body mb-2 leading-tight">
-                      {mcp.description}
+                      {mcp.description || 'No description provided.'}
                     </p>
                     <div className="flex flex-wrap gap-1">
                       {(mcp.explicitCapabilities || []).slice(0, 2).map((cap: string) => (
@@ -376,7 +402,7 @@ export default function BWBPage() {
                   goals.map((goal) => (
                     <div key={goal.id} className="flex items-start gap-2 p-1.5 border border-border/50 bg-background/50">
                       <Target className="w-3 h-3 text-primary mt-0.5" />
-                      <span className="text-[10px] text-foreground font-body leading-tight">{goal.title}</span>
+                      <span className="text-[10px] text-foreground font-body leading-tight">{goal.title || 'Untitled Goal'}</span>
                     </div>
                   ))
                 )}
@@ -407,7 +433,7 @@ export default function BWBPage() {
               {selectedMcp && (
                 <div className="text-[10px] font-code text-primary flex items-center gap-2">
                   <CheckCircle2 className="w-3 h-3" />
-                  <span>TARGET_NODE: {selectedMcp.name.toUpperCase()}</span>
+                  <span>TARGET_NODE: {(selectedMcp.name || 'UNNAMED').toUpperCase()}</span>
                 </div>
               )}
             </div>
@@ -416,9 +442,11 @@ export default function BWBPage() {
               <KnowledgeGraph mcps={mcps} />
               
               <div className="flex-1 industrial-panel bg-muted/5 flex flex-col overflow-hidden">
-                <div className="p-2 border-b border-border bg-muted/20 flex items-center gap-2 text-[10px] font-code uppercase text-muted-foreground">
-                  <FileSearch className="w-3 h-3" />
-                  <span>Analytical Stream</span>
+                <div className="p-2 border-b border-border bg-muted/20 flex items-center justify-between text-[10px] font-code uppercase text-muted-foreground">
+                  <div className="flex items-center gap-2">
+                    <FileSearch className="w-3 h-3" />
+                    <span>Analytical Stream</span>
+                  </div>
                 </div>
                 <ScrollArea className="flex-1 p-3">
                   <div className="space-y-4">
@@ -430,7 +458,7 @@ export default function BWBPage() {
                     )}
                     
                     {codeResults && (
-                      <div className="border-l-2 border-primary pl-3 py-1 bg-primary/5 mb-4">
+                      <div className="border-l-2 border-primary pl-3 py-1 bg-primary/5 mb-4 animate-in slide-in-from-left-2 duration-300">
                         <div className="flex items-center justify-between mb-2">
                           <h4 className="text-[11px] font-code uppercase text-primary">Boilerplate Generation</h4>
                           <Button 
@@ -450,7 +478,7 @@ export default function BWBPage() {
                     )}
 
                     {capResults && (
-                      <div className="border-l-2 border-primary pl-3 py-1 bg-primary/5 mb-4">
+                      <div className="border-l-2 border-primary pl-3 py-1 bg-primary/5 mb-4 animate-in slide-in-from-left-2 duration-300">
                         <h4 className="text-[11px] font-code uppercase text-primary mb-2">Capability Expansion Vector</h4>
                         <div className="space-y-2">
                           {capResults.implicitCapabilities.map((ic: any, idx: number) => (
@@ -464,7 +492,7 @@ export default function BWBPage() {
                     )}
 
                     {collResults && (
-                      <div className="border-l-2 border-chart-2 pl-3 py-1 bg-chart-2/5 mb-4">
+                      <div className="border-l-2 border-chart-2 pl-3 py-1 bg-chart-2/5 mb-4 animate-in slide-in-from-left-2 duration-300">
                         <h4 className="text-[11px] font-code uppercase text-chart-2 mb-2">Novel Architecture Propositions</h4>
                         <div className="space-y-2">
                           {collResults.novelSystems.map((ns: any, idx: number) => (
@@ -486,7 +514,7 @@ export default function BWBPage() {
                     )}
 
                     {intentResults && (
-                      <div className="border-l-2 border-chart-3 pl-3 py-1 bg-chart-3/5">
+                      <div className="border-l-2 border-chart-3 pl-3 py-1 bg-chart-3/5 animate-in slide-in-from-left-2 duration-300">
                         <h4 className="text-[11px] font-code uppercase text-chart-3 mb-2">Gap Analysis Matrix</h4>
                         <div className="bg-background border border-border p-2">
                           <div className="text-[10px] text-muted-foreground font-body leading-relaxed mb-3">{intentResults.reasoning}</div>
@@ -546,6 +574,31 @@ export default function BWBPage() {
                 onExecute={runCodeAgent}
                 loading={loadingStates['code']}
               />
+              
+              {simulations.length > 0 && (
+                <>
+                  <Separator className="my-2 bg-border/50" />
+                  <div className="flex flex-col gap-2 p-1">
+                    <div className="flex items-center gap-2 text-[10px] font-code uppercase text-muted-foreground mb-1">
+                      <History className="w-3 h-3" />
+                      <span>Simulation History</span>
+                    </div>
+                    {simulations.map((sim) => (
+                      <div key={sim.id} className="industrial-panel p-2 bg-muted/5 hover:bg-muted/10 transition-colors cursor-pointer group">
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-[8px] font-code text-muted-foreground uppercase leading-none">
+                            {sim.timestamp?.toDate ? sim.timestamp.toDate().toLocaleTimeString() : 'Recent'}
+                          </span>
+                          <span className="text-[8px] font-code text-primary leading-none uppercase">{sim.results?.length || 0} Concepts</span>
+                        </div>
+                        <div className="text-[9px] font-headline text-foreground truncate uppercase">
+                          {sim.results?.[0]?.name || 'Untitled Simulation'}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
             </div>
           </ScrollArea>
         </div>
@@ -564,7 +617,7 @@ export default function BWBPage() {
           </div>
         </div>
         <div className="flex items-center gap-4 text-[9px] font-code text-muted-foreground uppercase">
-          <span>{user.email}</span>
+          <span>{user?.email}</span>
           <span className="text-primary font-bold">SECURE_LINK_ACTIVE</span>
         </div>
       </footer>

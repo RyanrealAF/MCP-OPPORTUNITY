@@ -40,6 +40,27 @@
         "updatedAt": { "type": "string", "format": "date-time" }
       },
       "required": ["title", "status"]
+    },
+    "Simulation": {
+      "title": "Simulation",
+      "description": "Results from a combinatorial collision analysis.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "results": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": { "type": "string" },
+              "description": { "type": "string" },
+              "noveltyRank": { "type": "number" }
+            }
+          }
+        }
+      },
+      "required": ["timestamp", "results"]
     }
   },
   "auth": {
@@ -47,12 +68,16 @@
   },
   "firestore": {
     "/users/{userId}/mcps/{mcpId}": {
-      "schema": "#/entities/MCP",
+      "schema": { "$ref": "#/backend/entities/MCP" },
       "description": "User-specific MCP registry."
     },
     "/users/{userId}/goals/{goalId}": {
-      "schema": "#/entities/Goal",
+      "schema": { "$ref": "#/backend/entities/Goal" },
       "description": "User-specific strategic goals."
+    },
+    "/users/{userId}/simulations/{simId}": {
+      "schema": { "$ref": "#/backend/entities/Simulation" },
+      "description": "Historical collision agent simulation results."
     }
   }
 }
