@@ -97,7 +97,8 @@ export default function BWBHub() {
   };
 
   const filteredMcps = useMemo(() => {
-    return (mcps as MCP[]).filter((m) => {
+    const list = Array.isArray(mcps) ? mcps : [];
+    return list.filter((m) => {
       const search = registrySearch.toLowerCase();
       const nameMatch = (m.name || '').toLowerCase().includes(search);
       const descMatch = (m.description || '').toLowerCase().includes(search);
