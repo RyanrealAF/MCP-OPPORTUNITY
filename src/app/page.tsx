@@ -310,8 +310,20 @@ export default function BWBHub() {
       addLog('Authentication successful. Session established.', 'info');
     } catch (error: any) {
       console.error('Sign-in Error:', error);
-      toast({ title: "Authentication Failed", description: error.message, variant: "destructive" });
-      addLog(`Auth Error: ${error.message}`, 'error');
+      
+      let errorMessage = error.message;
+      if (error.code === 'auth/unauthorized-domain') {
+        errorMessage = "Unauthorized Domain: Please add this domain to the 'Authorized Domains' list in your Firebase Console (Authentication > Settings).";
+        addLog(`CRITICAL: Domain not authorized. Update Firebase Console settings.`, 'error');
+      } else {
+        addLog(`Auth Error: ${error.message}`, 'error');
+      }
+
+      toast({ 
+        title: "Authentication Failed", 
+        description: errorMessage, 
+        variant: "destructive" 
+      });
     }
   };
 
