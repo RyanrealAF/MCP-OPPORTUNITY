@@ -1,8 +1,7 @@
-
 'use server';
 /**
  * @fileOverview The Evolution Agent handles cross-repository codebase modifications.
- * It generates patches for ROOT, ASSISTANT, or SERVER targets.
+ * Adheres to Genkit 1.x standards.
  */
 
 import { ai } from '@/ai/genkit';
@@ -55,9 +54,9 @@ const evolutionAgentFlow = ai.defineFlow(
   },
   async (input) => {
     try {
-      const { output } = await prompt(input);
-      if (!output) throw new Error('Evolution Agent failed to generate patch.');
-      return output;
+      const response = await prompt(input);
+      if (!response.output) throw new Error('Evolution Agent failed to generate patch.');
+      return response.output;
     } catch (error: any) {
       console.error('Error in evolutionAgentFlow:', error);
       throw new Error(`Evolution Failed: ${error.message}`);

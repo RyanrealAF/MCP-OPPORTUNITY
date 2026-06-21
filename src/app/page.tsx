@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useMemo, useEffect } from 'react';
@@ -39,13 +38,12 @@ import { Separator } from '@/components/ui/separator';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 
 import { useAuth, useUser, useFirestore, useCollection } from '@/firebase';
 import { collection, addDoc, serverTimestamp, query, orderBy, limit, Timestamp } from 'firebase/firestore';
 import { GoogleAuthProvider, signInWithPopup, signOut } from 'firebase/auth';
 import { errorEmitter } from '@/firebase/error-emitter';
-import { FirestorePermissionError } from '@/firebase/errors';
+import { FirestorePermissionError, type SecurityRuleContext } from '@/firebase/errors';
 
 import { identifyImplicitCapabilities } from '@/ai/flows/identify-implicit-capabilities-flow';
 import { identifyMissingToolsForGoals } from '@/ai/flows/identify-missing-tools-for-goals';
@@ -75,6 +73,7 @@ export default function BWBHub() {
     return () => clearInterval(interval);
   }, []);
 
+  // Memoized Firestore references to prevent infinite re-renders
   const mcpsQuery = useMemo(() => {
     if (!db || !user) return null;
     return query(collection(db, 'users', user.uid, 'mcps'), orderBy('updatedAt', 'desc'));
@@ -162,7 +161,7 @@ export default function BWBHub() {
             path,
             operation: 'create',
             requestResourceData: simData,
-          });
+          } satisfies SecurityRuleContext);
           errorEmitter.emit('permission-error', permissionError);
         });
       }
@@ -258,7 +257,7 @@ export default function BWBHub() {
         path,
         operation: 'create',
         requestResourceData: data,
-      });
+      } satisfies SecurityRuleContext);
       errorEmitter.emit('permission-error', permissionError);
     });
   };
@@ -277,7 +276,7 @@ export default function BWBHub() {
         path,
         operation: 'create',
         requestResourceData: data,
-      });
+      } satisfies SecurityRuleContext);
       errorEmitter.emit('permission-error', permissionError);
     });
   };

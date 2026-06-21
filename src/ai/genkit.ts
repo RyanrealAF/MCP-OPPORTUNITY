@@ -3,8 +3,8 @@ import { googleAI } from '@genkit-ai/google-genai';
 
 /**
  * Genkit initialization for BWB-CODE-ASSISTANT.
+ * Strictly adheres to Genkit 1.x syntax.
  * Provides a centralized AI instance for orchestrating MCP capability expansion and collision analysis.
- * Hardened to prevent crashes during module evaluation if API keys are missing.
  */
 export const ai = genkit({
   plugins: [
