@@ -6,6 +6,11 @@ Industrial-grade ecosystem analyzer and code generation suite.
 - **Primary Interface**: `BWB-CODE-ASSISTANT` (This Application)
 - **Target Backend**: `BWB-MCP-SERVER`
 
+## Documentation
+- [Code Assistant Architecture](./docs/CODE-ASSISTANT-SYSTEM.md)
+- [Agent Specifications](./docs/CODE-ASSISTANT-AGENTS.md)
+- [MCP Server Roadmap & Proposals](./docs/MCP-SERVER-PROPOSALS.md)
+
 ## Deployment Instructions
 
 ### 1. Project Configuration
