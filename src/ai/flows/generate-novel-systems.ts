@@ -1,10 +1,6 @@
 'use server';
 /**
- * @fileOverview A GenAI agent for generating novel system and project ideas.
- *
- * - generateNovelSystems - A function that generates novel system and project ideas.
- * - GenerateNovelSystemsInput - The input type for the generateNovelSystems function.
- * - GenerateNovelSystemsOutput - The return type for the generateNovelSystems function.
+ * @fileOverview A GenAI agent for generating novel system and project ideas via combinatorial collision.
  */
 
 import { ai } from '@/ai/genkit';
@@ -19,7 +15,7 @@ export type GenerateNovelSystemsInput = z.infer<typeof GenerateNovelSystemsInput
 
 const NovelSystemIdeaOutputSchema = z.object({
   name: z.string().describe('Name of the novel system.'),
-  description: z.string().describe('Detailed explanation.'),
+  description: z.string().describe('Detailed explanation of the emergent architecture.'),
   combinedMcps: z.array(z.string()).describe('List of combined MCPs.'),
   combinedCapabilities: z.array(z.string()).describe('List of leveraged capabilities.'),
   noveltyRank: z.number().min(0).max(100).describe('Novelty score (0-100).'),
@@ -35,23 +31,24 @@ const generateNovelSystemsPrompt = ai.definePrompt({
   model: 'googleai/gemini-1.5-flash',
   input: { schema: GenerateNovelSystemsInputSchema },
   output: { schema: z.array(NovelSystemIdeaOutputSchema) },
-  prompt: `You are an expert innovation lead tasked with generating novel system ideas by combining existing MCPs and capabilities.
+  prompt: `You are the BWB Collision Agent. Your goal is to simulate combinatorial collisions between existing Managed Capability Providers (MCPs).
 
-MCPs:
+### Input MCPs:
 {{#each mcpDescriptions}}
 - {{{this}}}
 {{/each}}
 
-Capabilities:
+### Input Capabilities:
 {{#each capabilityDescriptions}}
 - {{{this}}}
 {{/each}}
 
 {{#if contextOrConstraints}}
-Constraints: {{{contextOrConstraints}}}
+### Constraints:
+{{{contextOrConstraints}}}
 {{/if}}
 
-Generate 3-7 novel system ideas. Output as a JSON array.`,
+Identify 3-5 novel systems that emerge from combining these nodes. Rank them by novelty.`,
 });
 
 const generateNovelSystemsFlow = ai.defineFlow(
@@ -64,12 +61,12 @@ const generateNovelSystemsFlow = ai.defineFlow(
     try {
       const { output } = await generateNovelSystemsPrompt(input);
       if (!output || !Array.isArray(output)) {
-        throw new Error('Failed to generate valid novel system ideas.');
+        throw new Error('Simulation failed to yield valid systemic results.');
       }
       return { novelSystems: output };
     } catch (error: any) {
-      console.error('Error in generateNovelSystemsFlow:', error);
-      throw new Error(`AI Generation Failed: ${error.message}`);
+      console.error('Collision Agent Simulation Fault:', error);
+      throw new Error(`Simulation Engine Failure: ${error.message}`);
     }
   }
 );

@@ -1,10 +1,6 @@
 'use server';
 /**
  * @fileOverview A flow to generate industrial-grade icons for MCP providers.
- *
- * - generateMcpIcon - A wrapper function for the icon generation flow.
- * - GenerateMcpIconInput - The input type for the icon generation process.
- * - GenerateMcpIconOutput - The output type for the icon generation process.
  */
 
 import { ai } from '@/ai/genkit';
@@ -29,23 +25,24 @@ const generateMcpIconFlow = ai.defineFlow(
   },
   async (input) => {
     try {
+      // Using Imagen 4.0 Fast for high-quality industrial iconography
       const { media } = await ai.generate({
         model: 'googleai/imagen-4.0-fast-generate-001',
-        prompt: `An industrial, minimalist, tech-inspired vector icon for a software service named "${input.name}". 
-        The service is described as: ${input.description}. 
-        Style: Schematic, monochrome, blueprints, circuit-like, professional, white lines on dark background.`,
+        prompt: `A professional, industrial, minimalist vector icon for a software capability named "${input.name}". 
+        Context: ${input.description}. 
+        Style: schematic, blueprint-inspired, thin white lines on dark charcoal background, high tech, engineering diagram, technical symbol.`,
       });
 
       if (!media || !media.url) {
-        throw new Error('AI failed to generate valid icon media.');
+        throw new Error('Kernel failed to generate valid icon media.');
       }
 
       return {
         iconDataUri: media.url,
       };
     } catch (error: any) {
-      console.error('Icon Generation Flow Error:', error);
-      throw new Error(`Icon Generation Failed: ${error.message}`);
+      console.error('Icon Generation Core Error:', error);
+      throw new Error(`Generation Service Unavailable: ${error.message}`);
     }
   }
 );
