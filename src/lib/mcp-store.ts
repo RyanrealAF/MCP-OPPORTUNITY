@@ -9,6 +9,7 @@ export interface MCP {
   id: string;
   name: string;
   description: string;
+  iconUrl?: string;
   explicitCapabilities: string[];
   implicitCapabilities: { name: string; description: string }[];
   version: string;
