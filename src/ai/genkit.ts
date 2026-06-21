@@ -9,6 +9,7 @@ const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_GENAI_API_KEY ||
 
 export const ai = genkit({
   plugins: [
+    // Provide an empty object if no key is found to prevent immediate plugin crashes
     apiKey ? googleAI({ apiKey }) : googleAI(),
   ],
 });

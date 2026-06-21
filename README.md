@@ -7,6 +7,7 @@ Industrial-grade ecosystem analyzer and code generation suite.
 - **Target Backend**: `BWB-MCP-SERVER`
 
 ## Documentation
+- [Academic Paper: Theoretical Foundations](./docs/ACADEMIC-PAPER.md)
 - [Code Assistant Architecture](./docs/CODE-ASSISTANT-SYSTEM.md)
 - [Agent Specifications](./docs/CODE-ASSISTANT-AGENTS.md)
 - [MCP Server Roadmap & Proposals](./docs/MCP-SERVER-PROPOSALS.md)

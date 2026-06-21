@@ -1,4 +1,3 @@
-
 /**
  * @fileOverview Type definitions for the MCP ecosystem data models.
  */
@@ -46,6 +45,10 @@ export interface EvolutionPatch {
   impactAnalysis: string;
 }
 
+/**
+ * Interface representing the output of the Evolution Agent.
+ * Synchronized with the Genkit EvolutionAgentOutput type.
+ */
 export interface EvolutionAgentOutput {
   patchDescription: string;
   code: string;

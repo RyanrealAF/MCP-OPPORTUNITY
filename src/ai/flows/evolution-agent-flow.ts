@@ -19,6 +19,7 @@ const EvolutionAgentOutputSchema = z.object({
   code: z.string().describe('The code or configuration changes to apply.'),
   filesAffected: z.array(z.string()).describe('List of files that will be modified.'),
   impactAnalysis: z.string().describe('An analysis of how this change affects the ecosystem.'),
+  target: z.enum(['BWB-ROOT', 'BWB-CODE-ASSISTANT', 'BWB-MCP-SERVER']).describe('The confirmed target for the patch.'),
 });
 export type EvolutionAgentOutput = z.infer<typeof EvolutionAgentOutputSchema>;
 
@@ -44,6 +45,7 @@ const prompt = ai.definePrompt({
 ### Requirements:
 1. Generate precise, production-ready code for the target.
 2. Provide a clear impact analysis explaining ecosystem propagation.
+3. Explicitly confirm the target repository in the output.
 
 Output the patch details and code implementation.`,
 });
@@ -58,7 +60,10 @@ const evolutionAgentFlow = ai.defineFlow(
     try {
       const response = await prompt(input);
       if (!response.output) throw new Error('Evolution Agent failed to generate patch.');
-      return response.output;
+      return {
+        ...response.output,
+        target: input.target // Ensure target is passed through
+      };
     } catch (error: any) {
       console.error('Error in evolutionAgentFlow:', error);
       throw new Error(`Evolution Failed: ${error.message}`);
