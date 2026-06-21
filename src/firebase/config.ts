@@ -3,12 +3,12 @@
  */
 
 export const firebaseConfig = {
-  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || "",
+  apiKey: "AIzaSyC325HsaJMBwXtEXdeTgXvaaFMqsEUNqJU",
   authDomain: "studio-8574497882-c7183.firebaseapp.com",
   projectId: "studio-8574497882-c7183",
   storageBucket: "studio-8574497882-c7183.firebasestorage.app",
-  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || "",
-  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID || ""
+  messagingSenderId: "446413147215",
+  appId: "1:446413147215:web:ba90f69ea3fa1dec142e3a"
 };
 
 /**
