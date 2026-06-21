@@ -5,7 +5,7 @@
  */
 
 import { ai } from '@/ai/genkit';
-import { z } from 'zod';
+import { z } from 'genkit';
 
 const EvolutionAgentInputSchema = z.object({
   target: z.enum(['BWB-ROOT', 'BWB-CODE-ASSISTANT', 'BWB-MCP-SERVER']).describe('The target repository to modify.'),
@@ -66,7 +66,7 @@ const evolutionAgentFlow = ai.defineFlow(
       };
     } catch (error: any) {
       console.error('Error in evolutionAgentFlow:', error);
-      throw new Error(`Evolution Failed: ${error.message}`);
+      throw new Error(`Evolution Failed: ${error.message || 'Unknown system fault'}`);
     }
   }
 );

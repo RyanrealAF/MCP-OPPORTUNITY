@@ -66,7 +66,7 @@ const generateNovelSystemsFlow = ai.defineFlow(
       return { novelSystems: output };
     } catch (error: any) {
       console.error('Collision Agent Simulation Fault:', error);
-      throw new Error(`Simulation Engine Failure: ${error.message}`);
+      throw new Error(`Simulation Engine Failure: ${error.message || 'Unknown collision fault'}`);
     }
   }
 );
