@@ -1,10 +1,9 @@
-
 "use client";
 
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { 
   Database, Cpu, GitBranch, Target, LayoutGrid, FileSearch, Settings2, Plus, Layers, Search, LogOut, Code2, 
-  Copy, CheckCircle2, AlertTriangle, History, ChevronRight, Terminal as TerminalIcon, Activity, Boxes, 
+  CheckCircle2, AlertTriangle, History, ChevronRight, Terminal as TerminalIcon, Activity, Boxes, 
   Network, Zap, GitPullRequest, RefreshCw, HardDrive, Save, Clock, Edit3, Trash2, Image as ImageIcon
 } from 'lucide-react';
 import { KnowledgeGraph } from '@/components/dashboard/KnowledgeGraph';
@@ -23,10 +22,9 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 
 import { useAuth, useUser, useFirestore, useCollection } from '@/firebase';
-import { collection, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, query, orderBy, limit, Timestamp } from 'firebase/firestore';
+import { collection, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, query, orderBy, limit } from 'firebase/firestore';
 import { GoogleAuthProvider, signInWithPopup, signOut } from 'firebase/auth';
-import { errorEmitter } from '@/firebase/error-emitter';
-import { FirestorePermissionError, type SecurityRuleContext } from '@/firebase/errors';
+import { cn } from '@/lib/utils';
 
 import { identifyImplicitCapabilities } from '@/ai/flows/identify-implicit-capabilities-flow';
 import { identifyMissingToolsForGoals } from '@/ai/flows/identify-missing-tools-for-goals';
@@ -50,7 +48,6 @@ export default function BWBHub() {
   const [activeTab, setActiveTab] = useState('insights');
   const [logs, setLogs] = useState<{ id: string; msg: string; type: 'info' | 'warn' | 'error' | 'ai'; time: string }[]>([]);
   
-  // Dialog States
   const [isMcpEditorOpen, setIsMcpEditorOpen] = useState(false);
   const [editingMcp, setEditingMcp] = useState<Partial<MCP> | null>(null);
 
@@ -73,7 +70,6 @@ export default function BWBHub() {
     setLogs(prev => [...prev, { id: Math.random().toString(), msg, type, time: new Date().toLocaleTimeString() }].slice(-50));
   };
 
-  // Memoized Firestore references
   const mcpsQuery = useMemo(() => {
     if (!db || !user) return null;
     return query(collection(db, 'users', user.uid, 'mcps'), orderBy('updatedAt', 'desc'));
@@ -84,20 +80,8 @@ export default function BWBHub() {
     return query(collection(db, 'users', user.uid, 'goals'), orderBy('updatedAt', 'desc'));
   }, [db, user]);
 
-  const simQuery = useMemo(() => {
-    if (!db || !user) return null;
-    return query(collection(db, 'users', user.uid, 'simulations'), orderBy('timestamp', 'desc'), limit(10));
-  }, [db, user]);
-
-  const logsQuery = useMemo(() => {
-    if (!db || !user) return null;
-    return query(collection(db, 'users', user.uid, 'evolution_logs'), orderBy('timestamp', 'desc'), limit(10));
-  }, [db, user]);
-
   const { data: mcps = [] } = useCollection<MCP>(mcpsQuery);
   const { data: goals = [] } = useCollection<Goal>(goalsQuery);
-  const { data: simulations = [] } = useCollection<Simulation>(simQuery);
-  const { data: evolutionLogs = [] } = useCollection<any>(logsQuery);
 
   const [registrySearch, setRegistrySearch] = useState('');
   
@@ -137,6 +121,7 @@ export default function BWBHub() {
       addLog(`Capability Agent completed. Identified ${result.implicitCapabilities.length} latent functions.`, 'info');
     } catch (e: any) {
       addLog(`Capability Agent Error: ${e.message}`, 'error');
+      toast({ title: "Agent Failure", description: e.message, variant: "destructive" });
     } finally {
       toggleLoading('capability', false);
     }
@@ -170,6 +155,7 @@ export default function BWBHub() {
       addLog(`Collision Agent completed. Generated ${result.novelSystems.length} novel architectures.`, 'info');
     } catch (e: any) {
       addLog(`Collision Agent Error: ${e.message}`, 'error');
+      toast({ title: "Agent Failure", description: e.message, variant: "destructive" });
     } finally {
       toggleLoading('collision', false);
     }
@@ -193,6 +179,7 @@ export default function BWBHub() {
       addLog('Intent Agent completed. Strategic gap matrix generated.', 'info');
     } catch (e: any) {
       addLog(`Intent Agent Error: ${e.message}`, 'error');
+      toast({ title: "Agent Failure", description: e.message, variant: "destructive" });
     } finally {
       toggleLoading('intent', false);
     }
@@ -217,6 +204,7 @@ export default function BWBHub() {
       addLog('Boilerplate generation successful. Code buffered.', 'info');
     } catch (e: any) {
       addLog(`Boilerplate Agent Error: ${e.message}`, 'error');
+      toast({ title: "Agent Failure", description: e.message, variant: "destructive" });
     } finally {
       toggleLoading('code', false);
     }
@@ -250,6 +238,7 @@ export default function BWBHub() {
       addLog(`Evolution Agent proposed a patch for ${evolutionTarget}.`, 'info');
     } catch (e: any) {
       addLog(`Evolution Agent Error: ${e.message}`, 'error');
+      toast({ title: "Agent Failure", description: e.message, variant: "destructive" });
     } finally {
       toggleLoading('evolution', false);
     }
@@ -264,7 +253,7 @@ export default function BWBHub() {
         description: mcp.description
       });
       const mcpRef = doc(db, 'users', user.uid, 'mcps', mcp.id);
-      updateDoc(mcpRef, {
+      await updateDoc(mcpRef, {
         iconUrl: result.iconDataUri,
         updatedAt: serverTimestamp()
       });
@@ -272,6 +261,7 @@ export default function BWBHub() {
       toast({ title: "Icon Generated", description: `Visual identifier mapped to ${mcp.name}.` });
     } catch (e: any) {
       addLog(`Icon Generation Error: ${e.message}`, 'error');
+      toast({ title: "Generation Failure", description: e.message, variant: "destructive" });
     }
   };
 
@@ -311,23 +301,23 @@ export default function BWBHub() {
     addLog('New node initialized in registry.', 'info');
   };
 
-  const handleAddGoal = () => {
-    if (!db || !user) return;
-    const path = `users/${user.uid}/goals`;
-    const data = {
-      title: 'Define Strategic Objective',
-      status: 'pending',
-      updatedAt: serverTimestamp()
-    };
-    addDoc(collection(db, path), data);
-    addLog('Strategic objective registered.', 'info');
+  const handleSignIn = async () => {
+    if (!auth) return;
+    try {
+      const provider = new GoogleAuthProvider();
+      await signInWithPopup(auth, provider);
+      addLog('Authentication successful. Session established.', 'info');
+    } catch (error: any) {
+      console.error('Sign-in Error:', error);
+      toast({ title: "Authentication Failed", description: error.message, variant: "destructive" });
+      addLog(`Auth Error: ${error.message}`, 'error');
+    }
   };
 
-  const formatTimestamp = (ts: any) => {
-    if (!ts) return 'N/A';
-    if (ts instanceof Timestamp) return ts.toDate().toLocaleTimeString();
-    if (ts?.toDate) return ts.toDate().toLocaleTimeString();
-    return 'Recent';
+  const handleSignOut = async () => {
+    if (!auth) return;
+    await signOut(auth);
+    addLog('Interface disconnected. Session terminated.', 'warn');
   };
 
   if (authLoading || !mounted) {
@@ -364,7 +354,7 @@ export default function BWBHub() {
                 <span>SERVER</span>
               </div>
             </div>
-            <Button onClick={() => signInWithPopup(auth!, new GoogleAuthProvider())} className="w-full font-code uppercase tracking-widest rounded-none h-14 bg-primary text-background hover:bg-primary/90 transition-all">
+            <Button onClick={handleSignIn} className="w-full font-code uppercase tracking-widest rounded-none h-14 bg-primary text-background hover:bg-primary/90 transition-all">
               Initialize Connection
             </Button>
           </CardContent>
@@ -520,7 +510,7 @@ export default function BWBHub() {
             <Button 
               variant="destructive" 
               size="sm" 
-              onClick={() => signOut(auth!)}
+              onClick={handleSignOut}
               className="w-full h-11 font-code uppercase text-[10px] tracking-[0.2em] rounded-none bg-red-950/20 border border-red-500/30 hover:bg-red-900/40 text-red-500 transition-all"
             >
               <LogOut className="w-4 h-4 mr-2" />
@@ -591,6 +581,12 @@ export default function BWBHub() {
                             </div>
                           </div>
                         )}
+                        {!capResults && !intentResults && (
+                          <div className="flex flex-col items-center justify-center py-20 opacity-20">
+                            <Activity className="w-16 h-16 mb-4" />
+                            <p className="text-[10px] font-code uppercase tracking-[0.2em]">Ready for Inference</p>
+                          </div>
+                        )}
                       </div>
                     )}
                     {activeTab === 'simulations' && collResults && (
@@ -631,7 +627,6 @@ export default function BWBHub() {
               </Tabs>
             </div>
 
-            {/* Terminal Interface */}
             <div className="h-40 industrial-panel bg-black/80 border-t-0 flex flex-col shrink-0">
               <div className="h-7 border-b border-border/50 bg-muted/20 px-3 flex items-center justify-between">
                 <div className="flex items-center gap-2 text-[9px] font-code text-primary uppercase tracking-[0.2em]">
@@ -711,7 +706,6 @@ export default function BWBHub() {
         </div>
       </main>
 
-      {/* MCP Editor Dialog */}
       <Dialog open={isMcpEditorOpen} onOpenChange={setIsMcpEditorOpen}>
         <DialogContent className="max-w-md industrial-panel bg-card p-6 border-primary/20">
           <DialogHeader>
