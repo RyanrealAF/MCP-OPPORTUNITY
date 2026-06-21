@@ -41,3 +41,4 @@ npm run deploy
 - **Collision Agent**: Simulates combinatorial collisions to discover novel systems.
 - **Intent Agent**: Maps technological gaps by referencing strategic objectives.
 - **Boilerplate Agent**: Generates production-ready TypeScript code for the **BWB-MCP-SERVER** ecosystem.
+- **Evolution Agent**: Orchestrates cross-repository codebase modifications.
