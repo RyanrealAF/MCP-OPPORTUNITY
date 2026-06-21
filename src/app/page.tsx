@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useMemo, useEffect } from 'react';
@@ -22,7 +23,11 @@ import {
   Terminal,
   Activity,
   Boxes,
-  Network
+  Network,
+  Zap,
+  GitPullRequest,
+  RefreshCw,
+  HardDrive
 } from 'lucide-react';
 import { KnowledgeGraph } from '@/components/dashboard/KnowledgeGraph';
 import { AgentPanel } from '@/components/dashboard/AgentPanel';
@@ -34,6 +39,7 @@ import { Separator } from '@/components/ui/separator';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 
 import { useAuth, useUser, useFirestore, useCollection } from '@/firebase';
 import { collection, addDoc, serverTimestamp, query, orderBy, limit, Timestamp } from 'firebase/firestore';
@@ -45,7 +51,8 @@ import { identifyImplicitCapabilities } from '@/ai/flows/identify-implicit-capab
 import { identifyMissingToolsForGoals } from '@/ai/flows/identify-missing-tools-for-goals';
 import { generateNovelSystems } from '@/ai/flows/generate-novel-systems';
 import { generateMcpBoilerplate } from '@/ai/flows/generate-mcp-boilerplate';
-import { MCP, Goal, Simulation } from '@/lib/mcp-store';
+import { executeEvolution } from '@/ai/flows/evolution-agent-flow';
+import { MCP, Goal, Simulation, RepositoryTarget, EvolutionAgentOutput } from '@/lib/mcp-store';
 
 export default function BWBHub() {
   const { user, loading: authLoading } = useUser();
@@ -56,6 +63,8 @@ export default function BWBHub() {
   const [mounted, setMounted] = useState(false);
   const [currentTime, setCurrentTime] = useState<string>('');
   const [selectedMcp, setSelectedMcp] = useState<MCP | null>(null);
+  const [evolutionTarget, setEvolutionTarget] = useState<RepositoryTarget>('BWB-MCP-SERVER');
+  const [evolutionInstruction, setEvolutionInstruction] = useState('');
 
   useEffect(() => {
     setMounted(true);
@@ -91,6 +100,7 @@ export default function BWBHub() {
   const [collResults, setCollResults] = useState<any>(null);
   const [intentResults, setIntentResults] = useState<any>(null);
   const [codeResults, setCodeResults] = useState<any>(null);
+  const [evolutionResults, setEvolutionResults] = useState<EvolutionAgentOutput | null>(null);
   const [loadingStates, setLoadingStates] = useState<Record<string, boolean>>({});
 
   const toggleLoading = (agent: string, state: boolean) => {
@@ -205,6 +215,28 @@ export default function BWBHub() {
       toast({ title: "Generation Failed", description: e.message, variant: "destructive" });
     } finally {
       toggleLoading('code', false);
+    }
+  };
+
+  const runEvolutionAgent = async () => {
+    if (!evolutionInstruction.trim()) {
+      toast({ title: "Missing Instructions", description: "Provide specific evolution instructions to proceed.", variant: "destructive" });
+      return;
+    }
+    toggleLoading('evolution', true);
+    setEvolutionResults(null);
+    try {
+      const result = await executeEvolution({
+        target: evolutionTarget,
+        instruction: evolutionInstruction,
+        context: selectedMcp ? `Selected MCP context: ${selectedMcp.name} - ${selectedMcp.description}` : undefined
+      });
+      setEvolutionResults(result);
+      toast({ title: "Evolution Proposed", description: "New system evolution patch generated." });
+    } catch (e: any) {
+      toast({ title: "Evolution Failed", description: e.message, variant: "destructive" });
+    } finally {
+      toggleLoading('evolution', false);
     }
   };
 
@@ -486,20 +518,73 @@ export default function BWBHub() {
                     <span>Inference Stream</span>
                   </div>
                   <div className="flex items-center gap-4 opacity-50">
-                    <span>Buffer: 1024KB</span>
-                    <span>Status: RUNNING</span>
+                    <span>Buffer: 2048KB</span>
+                    <span>Status: EVOLVING</span>
                   </div>
                 </div>
                 
                 <ScrollArea className="flex-1 p-5">
                   <div className="space-y-6">
-                    {!capResults && !collResults && !intentResults && !codeResults && (
+                    {!capResults && !collResults && !intentResults && !codeResults && !evolutionResults && (
                       <div className="flex flex-col items-center justify-center h-64 opacity-[0.05] text-center">
                         <Activity className="w-16 h-16 mb-4" />
                         <p className="font-code text-sm tracking-[1em] uppercase">Awaiting_Neural_Inference</p>
                       </div>
                     )}
                     
+                    {evolutionResults && (
+                      <div className="border-l-2 border-primary pl-5 py-2 bg-primary/5 animate-in slide-in-from-left-4 duration-500">
+                        <div className="flex items-center justify-between mb-4">
+                          <div className="flex items-center gap-3">
+                            <h4 className="text-[12px] font-code uppercase text-primary font-bold tracking-widest">Evolution Patch: {evolutionResults.target}</h4>
+                            <Badge variant="outline" className="text-[8px] uppercase border-primary/20 bg-primary/10 text-primary">Proposed</Badge>
+                          </div>
+                          <div className="flex items-center gap-2">
+                             <Button 
+                              variant="outline" 
+                              size="sm" 
+                              className="h-7 text-[9px] font-code uppercase rounded-none border-primary/30 hover:bg-primary/10"
+                              onClick={() => {
+                                navigator.clipboard.writeText(evolutionResults.code);
+                                toast({ title: "Copied", description: "Evolution patch code copied." });
+                              }}
+                            >
+                              <Copy className="w-3.5 h-3.5 mr-2" />
+                              Copy Patch
+                            </Button>
+                            <Button 
+                              variant="default" 
+                              size="sm" 
+                              className="h-7 text-[9px] font-code uppercase rounded-none bg-primary text-background"
+                              onClick={() => {
+                                toast({ title: "Applied", description: `Evolution patch applied to ${evolutionResults.target}.` });
+                              }}
+                            >
+                              <GitPullRequest className="w-3.5 h-3.5 mr-2" />
+                              Apply to {evolutionResults.target.split('-')[1]}
+                            </Button>
+                          </div>
+                        </div>
+                        <div className="bg-background/80 border border-border p-5 font-code text-[11px] overflow-x-auto whitespace-pre leading-relaxed shadow-inner mb-4">
+                          {evolutionResults.code}
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="bg-muted/10 p-3 border-l-2 border-primary/50">
+                            <div className="text-[9px] font-code uppercase text-muted-foreground mb-1">Impact Analysis</div>
+                            <p className="text-[10px] text-foreground leading-relaxed italic">{evolutionResults.impactAnalysis}</p>
+                          </div>
+                          <div className="bg-muted/10 p-3 border-l-2 border-primary/50">
+                            <div className="text-[9px] font-code uppercase text-muted-foreground mb-1">Files Affected</div>
+                            <div className="flex flex-wrap gap-2">
+                              {evolutionResults.filesAffected.map(f => (
+                                <span key={f} className="text-[9px] font-code px-2 py-0.5 bg-background border border-border text-muted-foreground">{f}</span>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
                     {codeResults && (
                       <div className="border-l-2 border-primary pl-5 py-2 bg-primary/5 animate-in slide-in-from-left-4 duration-500">
                         <div className="flex items-center justify-between mb-4">
@@ -548,7 +633,7 @@ export default function BWBHub() {
                             <div key={idx} className="bg-background/50 border border-border p-4 hover:border-chart-2/50 transition-colors">
                               <div className="flex items-center justify-between mb-3">
                                 <div className="text-[11px] font-bold text-foreground font-headline uppercase tracking-widest">{ns.name}</div>
-                                <div className="text-[10px] font-code text-chart-2 px-2 py-0.5 border border-chart-2/30 bg-chart-2/10 font-bold uppercase">NOVELTY: {ns.noveltyRank}%</div>
+                                <div className="text-[10px] font-code text-chart-2 px-2 py-0.5 border border-chart-2/10 font-bold uppercase">NOVELTY: {ns.noveltyRank}%</div>
                               </div>
                               <div className="text-[11px] text-muted-foreground font-body leading-relaxed mb-4">{ns.description}</div>
                               <div className="flex flex-wrap gap-2">
@@ -598,6 +683,44 @@ export default function BWBHub() {
           
           <ScrollArea className="flex-1 p-4">
             <div className="flex flex-col gap-4">
+              <div className="industrial-panel p-3 bg-primary/5 border-primary/20 rounded-none mb-2">
+                <div className="flex items-center gap-2 text-[11px] font-code uppercase text-primary font-bold tracking-widest mb-3">
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  <span>Evolution Framework</span>
+                </div>
+                <div className="space-y-3">
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[9px] font-code text-muted-foreground uppercase tracking-widest">Evolution Target</label>
+                    <select 
+                      value={evolutionTarget}
+                      onChange={(e) => setEvolutionTarget(e.target.value as RepositoryTarget)}
+                      className="h-8 bg-background border border-border px-2 text-[10px] font-code uppercase text-primary outline-none focus:border-primary/50"
+                    >
+                      <option value="BWB-ROOT">BWB-ROOT</option>
+                      <option value="BWB-CODE-ASSISTANT">BWB-CODE-ASSISTANT</option>
+                      <option value="BWB-MCP-SERVER">BWB-MCP-SERVER</option>
+                    </select>
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[9px] font-code text-muted-foreground uppercase tracking-widest">Instruction Set</label>
+                    <Input 
+                      placeholder="Define evolution logic..." 
+                      className="h-8 text-[10px] font-code rounded-none border-border bg-background/50"
+                      value={evolutionInstruction}
+                      onChange={(e) => setEvolutionInstruction(e.target.value)}
+                    />
+                  </div>
+                  <Button 
+                    className="w-full h-9 bg-primary text-background font-code uppercase tracking-widest text-[10px] rounded-none hover:bg-primary/90"
+                    disabled={loadingStates['evolution']}
+                    onClick={runEvolutionAgent}
+                  >
+                    {loadingStates['evolution'] ? <Activity className="w-3.5 h-3.5 animate-spin" /> : <Zap className="w-3.5 h-3.5 mr-2" />}
+                    {loadingStates['evolution'] ? 'Evolving...' : 'Execute Evolution'}
+                  </Button>
+                </div>
+              </div>
+
               <AgentPanel 
                 name="Capability Agent"
                 icon={<GitBranch className="w-4 h-4" />}
@@ -620,7 +743,7 @@ export default function BWBHub() {
                 loading={loadingStates['intent']}
               />
               
-              <Separator className="my-4 bg-border/40" />
+              <Separator className="my-2 bg-border/40" />
               
               <AgentPanel 
                 name="Boilerplate Agent"

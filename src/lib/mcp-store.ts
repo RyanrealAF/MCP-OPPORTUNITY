@@ -3,6 +3,8 @@
  * @fileOverview Type definitions for the MCP ecosystem data models.
  */
 
+export type RepositoryTarget = 'BWB-ROOT' | 'BWB-CODE-ASSISTANT' | 'BWB-MCP-SERVER';
+
 export interface MCP {
   id: string;
   name: string;
@@ -33,4 +35,12 @@ export interface Simulation {
   id: string;
   timestamp: any;
   results: SimulationResult[];
+}
+
+export interface EvolutionPatch {
+  target: RepositoryTarget;
+  description: string;
+  code: string;
+  filesAffected: string[];
+  impactAnalysis: string;
 }
