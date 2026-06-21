@@ -1,11 +1,7 @@
 'use server';
 /**
  * @fileOverview A GenAI agent for generating MCP (Managed Capability Provider) boilerplate code.
- * Optimized for the BWB-MCP-SERVER architecture.
- *
- * - generateMcpBoilerplate - A function that generates TypeScript boilerplate for an MCP.
- * - GenerateMcpBoilerplateInput - The input type for the generateMcpBoilerplate function.
- * - GenerateMcpBoilerplateOutput - The return type for the generateMcpBoilerplate function.
+ * Optimized for the BWB-MCP-SERVER architecture with industrial enhancements.
  */
 
 import { ai } from '@/ai/genkit';
@@ -30,7 +26,7 @@ const prompt = ai.definePrompt({
   input: { schema: GenerateMcpBoilerplateInputSchema },
   output: { schema: GenerateMcpBoilerplateOutputSchema },
   prompt: `You are an expert software architect specializing in the BWB-MCP-SERVER ecosystem.
-Your goal is to generate high-quality, production-ready TypeScript boilerplate code for a new Managed Capability Provider (MCP) that will integrate into the BWB-MCP-SERVER backend.
+Your goal is to generate high-quality, production-ready TypeScript boilerplate code for a new Managed Capability Provider (MCP).
 
 ### MCP Metadata:
 Name: {{{name}}}
@@ -40,14 +36,14 @@ Capabilities:
 - {{{this}}}
 {{/each}}
 
-### BWB-MCP-SERVER Requirements:
-1. Use TypeScript with strict interface definitions.
-2. Implement a class-based structure that extends the standard 'BaseMcpProvider'.
-3. Include comprehensive JSDoc comments for each capability method.
-4. Implement standard initialization logic, health checks, and error boundaries.
-5. Ensure the code is modular and ready to be dropped into the BWB-MCP-SERVER /providers directory.
+### BWB-MCP-SERVER Industrial Requirements (MANDATORY):
+1. **BaseMcpProvider Enhancement**: Implement 'async healthCheck(): Promise<HealthStatus>' and 'getLatencyMetric(): number'.
+2. **Inter-Provider Bus**: Use 'this.bus.publish()' and 'this.bus.subscribe()' for inter-provider communication.
+3. **Telemetry**: Integrate OpenTelemetry hooks for monitoring and tracing.
+4. **Auth Protocol**: If relevant, implement OIDC (OpenID Connect) support for secure identity propagation.
+5. **Structure**: Extend the standard 'BaseMcpProvider' abstract class. Use strict TypeScript types.
 
-Output the code and a brief architectural explanation explaining how it fits into the BWB-MCP-SERVER hierarchy.`,
+Output the code and an architectural explanation.`,
 });
 
 const generateMcpBoilerplateFlow = ai.defineFlow(

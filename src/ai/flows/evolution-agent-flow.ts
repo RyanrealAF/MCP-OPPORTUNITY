@@ -1,7 +1,7 @@
 'use server';
 /**
  * @fileOverview The Evolution Agent handles cross-repository codebase modifications.
- * Adheres to Genkit 1.x standards.
+ * Enhanced to support BWB-MCP-SERVER industrial standards.
  */
 
 import { ai } from '@/ai/genkit';
@@ -27,7 +27,7 @@ const prompt = ai.definePrompt({
   model: 'googleai/gemini-1.5-flash',
   input: { schema: EvolutionAgentInputSchema },
   output: { schema: EvolutionAgentOutputSchema },
-  prompt: `You are the BWB Evolution Agent, a high-level system architect with write-access permissions across the ecosystem.
+  prompt: `You are the BWB Evolution Agent, a high-level system architect.
 
 ### Target Repository: {{{target}}}
 ### Instruction: {{{instruction}}}
@@ -36,12 +36,14 @@ const prompt = ai.definePrompt({
 {{{context}}}
 {{/if}}
 
+### BWB-MCP-SERVER Industrial Standards (REQUIRED FOR SERVER TARGET):
+- Any structural modification to providers MUST include health checks and telemetry metrics.
+- Inter-provider communication MUST leverage the standardized message bus.
+- Security updates MUST align with OIDC standards.
+
 ### Requirements:
-1. Generate precise, production-ready code or configuration for the target.
-2. If the target is BWB-ROOT, focus on infrastructure, build scripts, or project-wide documentation.
-3. If the target is BWB-CODE-ASSISTANT, focus on UI components, AI flows, or React logic.
-4. If the target is BWB-MCP-SERVER, focus on backend providers, core engine logic, or MCP interfaces.
-5. Provide a clear impact analysis explaining how this change propagates through the hierarchy.
+1. Generate precise, production-ready code for the target.
+2. Provide a clear impact analysis explaining ecosystem propagation.
 
 Output the patch details and code implementation.`,
 });
