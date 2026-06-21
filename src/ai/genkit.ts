@@ -3,14 +3,12 @@ import { googleAI } from '@genkit-ai/google-genai';
 
 /**
  * Genkit initialization with robust environment variable handling.
- * This prevents module-level crashes during Next.js build or SSR if keys are missing.
+ * We ensure the plugin is initialized even if the key is temporarily missing to prevent 500 errors on page load.
  */
-const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_GENAI_API_KEY || process.env.GOOGLE_API_KEY;
-
 export const ai = genkit({
-  plugins: apiKey ? [
+  plugins: [
     googleAI({
-      apiKey: apiKey,
+      apiKey: process.env.GEMINI_API_KEY || process.env.GOOGLE_GENAI_API_KEY || process.env.GOOGLE_API_KEY,
     }),
-  ] : [],
+  ],
 });
