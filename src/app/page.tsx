@@ -21,7 +21,8 @@ import {
   Copy,
   CheckCircle2,
   AlertTriangle,
-  History
+  History,
+  ChevronRight
 } from 'lucide-react';
 import { KnowledgeGraph } from '@/components/dashboard/KnowledgeGraph';
 import { AgentPanel } from '@/components/dashboard/AgentPanel';
@@ -182,7 +183,7 @@ export default function BWBPage() {
     if (!selectedMcp) {
       toast({
         title: "Action Required",
-        description: "Select an MCP from the registry to generate boilerplate code.",
+        description: "Select an MCP from the registry to generate BWB-MCP-SERVER boilerplate.",
         variant: "destructive"
       });
       return;
@@ -260,7 +261,7 @@ export default function BWBPage() {
     navigator.clipboard.writeText(text);
     toast({
       title: "Success",
-      description: "Code copied to clipboard.",
+      description: "BWB-MCP-SERVER code copied to clipboard.",
     });
   };
 
@@ -289,7 +290,13 @@ export default function BWBPage() {
             </div>
             <div className="text-center">
               <h1 className="font-code text-xl font-bold text-primary mb-2 tracking-tighter uppercase">BWB // CODE-ASSISTANT</h1>
-              <p className="text-xs text-muted-foreground font-body">Production portal. Authentication required for system access.</p>
+              <p className="text-[10px] text-muted-foreground font-code uppercase tracking-widest flex items-center justify-center gap-2">
+                <span>UI</span>
+                <ChevronRight className="w-3 h-3" />
+                <span>ASSISTANT</span>
+                <ChevronRight className="w-3 h-3" />
+                <span>MCP-SERVER</span>
+              </p>
             </div>
             <Button onClick={handleSignIn} className="w-full font-code uppercase tracking-widest rounded-none h-12">
               Authenticate via Google
@@ -308,7 +315,10 @@ export default function BWBPage() {
             <div className="w-5 h-5 bg-primary flex items-center justify-center">
               <Code2 className="w-3.5 h-3.5 text-background" />
             </div>
-            <h1 className="font-code text-sm font-bold tracking-tighter uppercase text-primary">BWB // CODE-ASSISTANT</h1>
+            <div className="flex flex-col">
+              <h1 className="font-code text-sm font-bold tracking-tighter uppercase text-primary leading-none">BWB // CODE-ASSISTANT</h1>
+              <div className="text-[8px] font-code text-muted-foreground uppercase mt-0.5 tracking-[0.2em]">ORCHESTRATING BWB-MCP-SERVER</div>
+            </div>
           </div>
           <Separator orientation="vertical" className="h-6 mx-2 opacity-50" />
           <nav className="flex items-center gap-1">
@@ -347,7 +357,7 @@ export default function BWBPage() {
             <div className="relative">
               <Search className="absolute left-2 top-2.5 h-3 w-3 text-muted-foreground" />
               <Input 
-                placeholder="Query Registry..." 
+                placeholder="Query BWB-MCP-SERVER..." 
                 className="h-8 pl-8 text-[11px] font-code rounded-none border-border bg-background"
                 value={registrySearch}
                 onChange={(e) => setRegistrySearch(e.target.value)}
@@ -466,7 +476,7 @@ export default function BWBPage() {
                     {codeResults && (
                       <div className="border-l-2 border-primary pl-3 py-1 bg-primary/5 mb-4 animate-in slide-in-from-left-2 duration-300">
                         <div className="flex items-center justify-between mb-2">
-                          <h4 className="text-[11px] font-code uppercase text-primary">Boilerplate Generation</h4>
+                          <h4 className="text-[11px] font-code uppercase text-primary">BWB-MCP-SERVER Boilerplate</h4>
                           <Button 
                             variant="ghost" 
                             size="icon" 
@@ -576,7 +586,7 @@ export default function BWBPage() {
               <AgentPanel 
                 name="Boilerplate Agent"
                 icon={<Code2 className="w-3.5 h-3.5" />}
-                description="Generate industrial-grade TypeScript implementation for the selected MCP target."
+                description="Generate BWB-MCP-SERVER TypeScript implementation for the selected target."
                 onExecute={runCodeAgent}
                 loading={loadingStates['code']}
               />
@@ -624,7 +634,7 @@ export default function BWBPage() {
         </div>
         <div className="flex items-center gap-4 text-[9px] font-code text-muted-foreground uppercase">
           <span>{user?.email}</span>
-          <span className="text-primary font-bold">SECURE_LINK_ACTIVE</span>
+          <span className="text-primary font-bold">BWB-MCP-SERVER_CONNECTED</span>
         </div>
       </footer>
     </div>

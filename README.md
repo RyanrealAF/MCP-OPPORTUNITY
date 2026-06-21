@@ -1,6 +1,11 @@
 # BWB Code Assistant
 Industrial-grade ecosystem analyzer and code generation suite.
 
+## Hierarchy
+- **Repository**: `BWB-ROOT`
+- **Primary Interface**: `BWB-CODE-ASSISTANT` (This Application)
+- **Target Backend**: `BWB-MCP-SERVER`
+
 ## Deployment Instructions
 
 ### 1. Project Configuration
@@ -30,4 +35,4 @@ npm run deploy
 - **Capability Agent**: Extracts implicit expansion potential from node metadata.
 - **Collision Agent**: Simulates combinatorial collisions to discover novel systems.
 - **Intent Agent**: Maps technological gaps by referencing strategic objectives.
-- **Boilerplate Agent**: Generates production-ready TypeScript code.
+- **Boilerplate Agent**: Generates production-ready TypeScript code for the **BWB-MCP-SERVER** ecosystem.

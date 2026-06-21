@@ -2,8 +2,8 @@ import { genkit } from 'genkit';
 import { googleAI } from '@genkit-ai/google-genai';
 
 /**
- * Genkit initialization with robust environment variable handling.
- * We ensure the plugin is initialized even if the key is temporarily missing to prevent crashes.
+ * Genkit initialization for BWB-CODE-ASSISTANT.
+ * Provides a centralized AI instance for orchestrating MCP capability expansion and collision analysis.
  */
 export const ai = genkit({
   plugins: [
