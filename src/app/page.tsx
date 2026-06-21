@@ -21,7 +21,8 @@ import {
   ChevronRight,
   Terminal,
   Activity,
-  Boxes
+  Boxes,
+  Network
 } from 'lucide-react';
 import { KnowledgeGraph } from '@/components/dashboard/KnowledgeGraph';
 import { AgentPanel } from '@/components/dashboard/AgentPanel';
