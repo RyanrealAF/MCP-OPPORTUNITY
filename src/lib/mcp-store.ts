@@ -44,3 +44,11 @@ export interface EvolutionPatch {
   filesAffected: string[];
   impactAnalysis: string;
 }
+
+export interface EvolutionAgentOutput {
+  patchDescription: string;
+  code: string;
+  filesAffected: string[];
+  impactAnalysis: string;
+  target: RepositoryTarget;
+}
