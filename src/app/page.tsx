@@ -26,7 +26,9 @@ import {
   Zap,
   GitPullRequest,
   RefreshCw,
-  HardDrive
+  HardDrive,
+  Save,
+  Clock
 } from 'lucide-react';
 import { KnowledgeGraph } from '@/components/dashboard/KnowledgeGraph';
 import { AgentPanel } from '@/components/dashboard/AgentPanel';
@@ -37,10 +39,11 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 
 import { useAuth, useUser, useFirestore, useCollection } from '@/firebase';
-import { collection, addDoc, serverTimestamp, query, orderBy, limit, Timestamp } from 'firebase/firestore';
+import { collection, addDoc, updateDoc, doc, serverTimestamp, query, orderBy, limit, Timestamp } from 'firebase/firestore';
 import { GoogleAuthProvider, signInWithPopup, signOut } from 'firebase/auth';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError, type SecurityRuleContext } from '@/firebase/errors';
@@ -63,6 +66,7 @@ export default function BWBHub() {
   const [selectedMcp, setSelectedMcp] = useState<MCP | null>(null);
   const [evolutionTarget, setEvolutionTarget] = useState<RepositoryTarget>('BWB-MCP-SERVER');
   const [evolutionInstruction, setEvolutionInstruction] = useState('');
+  const [activeTab, setActiveTab] = useState('insights');
 
   useEffect(() => {
     setMounted(true);
@@ -73,7 +77,7 @@ export default function BWBHub() {
     return () => clearInterval(interval);
   }, []);
 
-  // Memoized Firestore references to prevent infinite re-renders
+  // Memoized Firestore references
   const mcpsQuery = useMemo(() => {
     if (!db || !user) return null;
     return query(collection(db, 'users', user.uid, 'mcps'), orderBy('updatedAt', 'desc'));
@@ -89,9 +93,15 @@ export default function BWBHub() {
     return query(collection(db, 'users', user.uid, 'simulations'), orderBy('timestamp', 'desc'), limit(10));
   }, [db, user]);
 
+  const logsQuery = useMemo(() => {
+    if (!db || !user) return null;
+    return query(collection(db, 'users', user.uid, 'evolution_logs'), orderBy('timestamp', 'desc'), limit(10));
+  }, [db, user]);
+
   const { data: mcps = [] } = useCollection<MCP>(mcpsQuery);
   const { data: goals = [] } = useCollection<Goal>(goalsQuery);
   const { data: simulations = [] } = useCollection<Simulation>(simQuery);
+  const { data: evolutionLogs = [] } = useCollection<any>(logsQuery);
 
   const [registrySearch, setRegistrySearch] = useState('');
   
@@ -122,6 +132,7 @@ export default function BWBHub() {
     }
     toggleLoading('capability', true);
     setCapResults(null);
+    setActiveTab('insights');
     try {
       const desc = mcps.map((m: any) => `${m.name || 'Unnamed'}: ${m.description || 'No description'}`).join('\n');
       const result = await identifyImplicitCapabilities({ mcpDescriptions: desc });
@@ -140,6 +151,7 @@ export default function BWBHub() {
     }
     toggleLoading('collision', true);
     setCollResults(null);
+    setActiveTab('simulations');
     try {
       const mcpDescs = mcps.map((m: any) => m.description || 'No description');
       const capDescs = mcps.flatMap((m: any) => m.explicitCapabilities || []);
@@ -179,6 +191,7 @@ export default function BWBHub() {
     }
     toggleLoading('intent', true);
     setIntentResults(null);
+    setActiveTab('insights');
     try {
       const result = await identifyMissingToolsForGoals({
         goals: goals.map((g: any) => g.title || 'Untitled Goal'),
@@ -203,6 +216,7 @@ export default function BWBHub() {
     }
     toggleLoading('code', true);
     setCodeResults(null);
+    setActiveTab('code');
     try {
       const result = await generateMcpBoilerplate({
         name: selectedMcp.name || 'UnnamedProvider',
@@ -224,6 +238,7 @@ export default function BWBHub() {
     }
     toggleLoading('evolution', true);
     setEvolutionResults(null);
+    setActiveTab('evolution');
     try {
       const result = await executeEvolution({
         target: evolutionTarget,
@@ -231,12 +246,49 @@ export default function BWBHub() {
         context: selectedMcp ? `Selected MCP context: ${selectedMcp.name} - ${selectedMcp.description}` : undefined
       });
       setEvolutionResults(result);
+      
+      if (db && user) {
+        const path = `users/${user.uid}/evolution_logs`;
+        const logData = {
+          target: evolutionTarget,
+          description: evolutionInstruction,
+          timestamp: serverTimestamp(),
+          status: 'proposed'
+        };
+        addDoc(collection(db, path), logData).catch(async () => {
+          const permissionError = new FirestorePermissionError({
+            path,
+            operation: 'create',
+            requestResourceData: logData,
+          } satisfies SecurityRuleContext);
+          errorEmitter.emit('permission-error', permissionError);
+        });
+      }
+      
       toast({ title: "Evolution Proposed", description: "New system evolution patch generated." });
     } catch (e: any) {
       toast({ title: "Evolution Failed", description: e.message, variant: "destructive" });
     } finally {
       toggleLoading('evolution', false);
     }
+  };
+
+  const persistImplicitCapabilities = (mcpId: string, caps: any[]) => {
+    if (!db || !user || !mcpId) return;
+    const mcpRef = doc(db, 'users', user.uid, 'mcps', mcpId);
+    updateDoc(mcpRef, {
+      implicitCapabilities: caps,
+      updatedAt: serverTimestamp()
+    }).then(() => {
+      toast({ title: "Capabilities Persisted", description: `Implicit capabilities mapped to ${selectedMcp?.name}.` });
+    }).catch(async () => {
+      const permissionError = new FirestorePermissionError({
+        path: mcpRef.path,
+        operation: 'update',
+        requestResourceData: { implicitCapabilities: caps }
+      } satisfies SecurityRuleContext);
+      errorEmitter.emit('permission-error', permissionError);
+    });
   };
 
   const handleAddMcp = () => {
@@ -510,164 +562,217 @@ export default function BWBHub() {
             <div className="flex-1 relative flex flex-col gap-4 overflow-hidden">
               <KnowledgeGraph mcps={mcps} />
               
-              <div className="flex-1 industrial-panel bg-card/30 backdrop-blur-sm flex flex-col overflow-hidden border-t-0">
-                <div className="px-4 py-2 border-b border-border bg-muted/20 flex items-center justify-between text-[10px] font-code uppercase font-bold tracking-widest text-muted-foreground">
-                  <div className="flex items-center gap-2">
-                    <FileSearch className="w-3.5 h-3.5 text-primary" />
-                    <span>Inference Stream</span>
-                  </div>
-                  <div className="flex items-center gap-4 opacity-50">
+              <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 industrial-panel bg-card/30 backdrop-blur-sm flex flex-col overflow-hidden border-t-0">
+                <div className="px-4 py-1 border-b border-border bg-muted/20 flex items-center justify-between">
+                  <TabsList className="bg-transparent border-0 h-9 p-0 gap-4">
+                    <TabsTrigger value="insights" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent text-[10px] font-code uppercase tracking-widest">
+                      <FileSearch className="w-3 h-3 mr-2" />
+                      Inference
+                    </TabsTrigger>
+                    <TabsTrigger value="simulations" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent text-[10px] font-code uppercase tracking-widest">
+                      <Layers className="w-3 h-3 mr-2" />
+                      Simulations
+                    </TabsTrigger>
+                    <TabsTrigger value="evolution" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent text-[10px] font-code uppercase tracking-widest">
+                      <Zap className="w-3 h-3 mr-2" />
+                      Evolution
+                    </TabsTrigger>
+                    <TabsTrigger value="code" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent text-[10px] font-code uppercase tracking-widest">
+                      <Code2 className="w-3 h-3 mr-2" />
+                      Code
+                    </TabsTrigger>
+                  </TabsList>
+                  <div className="flex items-center gap-4 opacity-50 text-[9px] font-code uppercase tracking-widest">
                     <span>Buffer: 2048KB</span>
-                    <span>Status: EVOLVING</span>
+                    <span>Status: {loadingStates['capability'] || loadingStates['collision'] || loadingStates['evolution'] ? 'ANALYZING' : 'READY'}</span>
                   </div>
                 </div>
                 
-                <ScrollArea className="flex-1 p-5">
-                  <div className="space-y-6">
-                    {!capResults && !collResults && !intentResults && !codeResults && !evolutionResults && (
-                      <div className="flex flex-col items-center justify-center h-64 opacity-[0.05] text-center">
-                        <Activity className="w-16 h-16 mb-4" />
-                        <p className="font-code text-sm tracking-[1em] uppercase">Awaiting_Neural_Inference</p>
-                      </div>
-                    )}
-                    
-                    {evolutionResults && (
-                      <div className="border-l-2 border-primary pl-5 py-2 bg-primary/5 animate-in slide-in-from-left-4 duration-500">
-                        <div className="flex items-center justify-between mb-4">
-                          <div className="flex items-center gap-3">
-                            <h4 className="text-[12px] font-code uppercase text-primary font-bold tracking-widest">Evolution Patch: {evolutionResults.target}</h4>
-                            <Badge variant="outline" className="text-[8px] uppercase border-primary/20 bg-primary/10 text-primary">Proposed</Badge>
+                <ScrollArea className="flex-1">
+                  <div className="p-5">
+                    <TabsContent value="insights" className="mt-0 space-y-6">
+                      {!capResults && !intentResults && (
+                        <div className="flex flex-col items-center justify-center h-48 opacity-[0.05] text-center">
+                          <Activity className="w-12 h-12 mb-4" />
+                          <p className="font-code text-xs tracking-[0.5em] uppercase">No Insights Streamed</p>
+                        </div>
+                      )}
+                      
+                      {capResults && (
+                        <div className="border-l-2 border-primary pl-5 py-2 bg-primary/5 animate-in slide-in-from-left-4 duration-500">
+                          <div className="flex items-center justify-between mb-4">
+                            <h4 className="text-[12px] font-code uppercase text-primary font-bold tracking-widest">Capability Expansion Propositions</h4>
+                            {selectedMcp && (
+                              <Button 
+                                onClick={() => persistImplicitCapabilities(selectedMcp.id, capResults.implicitCapabilities)} 
+                                variant="outline" 
+                                size="sm" 
+                                className="h-7 text-[9px] font-code uppercase border-primary/30 rounded-none hover:bg-primary/10"
+                              >
+                                <Save className="w-3.5 h-3.5 mr-2" />
+                                Commit to Registry
+                              </Button>
+                            )}
                           </div>
-                          <div className="flex items-center gap-2">
-                             <Button 
-                              variant="outline" 
-                              size="sm" 
-                              className="h-7 text-[9px] font-code uppercase rounded-none border-primary/30 hover:bg-primary/10"
-                              onClick={() => {
-                                navigator.clipboard.writeText(evolutionResults.code);
-                                toast({ title: "Copied", description: "Evolution patch code copied." });
-                              }}
-                            >
-                              <Copy className="w-3.5 h-3.5 mr-2" />
-                              Copy Patch
-                            </Button>
-                            <Button 
-                              variant="default" 
-                              size="sm" 
-                              className="h-7 text-[9px] font-code uppercase rounded-none bg-primary text-background"
-                              onClick={() => {
-                                toast({ title: "Applied", description: `Evolution patch applied to ${evolutionResults.target}.` });
-                              }}
-                            >
-                              <GitPullRequest className="w-3.5 h-3.5 mr-2" />
-                              Apply to {evolutionResults.target.split('-')[1]}
-                            </Button>
-                          </div>
-                        </div>
-                        <div className="bg-background/80 border border-border p-5 font-code text-[11px] overflow-x-auto whitespace-pre leading-relaxed shadow-inner mb-4">
-                          {evolutionResults.code}
-                        </div>
-                        <div className="grid grid-cols-2 gap-4">
-                          <div className="bg-muted/10 p-3 border-l-2 border-primary/50">
-                            <div className="text-[9px] font-code uppercase text-muted-foreground mb-1">Impact Analysis</div>
-                            <p className="text-[10px] text-foreground leading-relaxed italic">{evolutionResults.impactAnalysis}</p>
-                          </div>
-                          <div className="bg-muted/10 p-3 border-l-2 border-primary/50">
-                            <div className="text-[9px] font-code uppercase text-muted-foreground mb-1">Files Affected</div>
-                            <div className="flex flex-wrap gap-2">
-                              {evolutionResults.filesAffected.map(f => (
-                                <span key={f} className="text-[9px] font-code px-2 py-0.5 bg-background border border-border text-muted-foreground">{f}</span>
-                              ))}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                    {codeResults && (
-                      <div className="border-l-2 border-primary pl-5 py-2 bg-primary/5 animate-in slide-in-from-left-4 duration-500">
-                        <div className="flex items-center justify-between mb-4">
-                          <h4 className="text-[12px] font-code uppercase text-primary font-bold tracking-widest">Generated BWB-MCP-SERVER Implementation</h4>
-                          <Button 
-                            variant="ghost" 
-                            size="icon" 
-                            className="h-8 w-8 text-primary hover:bg-primary/20 border border-primary/20 rounded-none"
-                            onClick={() => {
-                              navigator.clipboard.writeText(codeResults.code);
-                              toast({ title: "Copied", description: "Implementation code copied to clipboard." });
-                            }}
-                          >
-                            <Copy className="w-4 h-4" />
-                          </Button>
-                        </div>
-                        <div className="bg-background/80 border border-border p-5 font-code text-[11px] overflow-x-auto whitespace-pre leading-relaxed shadow-inner">
-                          {codeResults.code}
-                        </div>
-                        <div className="mt-3 flex items-start gap-3 text-[11px] text-muted-foreground bg-muted/10 p-3 border-l-2 border-muted-foreground/30">
-                          <CheckCircle2 className="w-4 h-4 text-green-500 shrink-0 mt-0.5" />
-                          <p className="italic">{codeResults.explanation}</p>
-                        </div>
-                      </div>
-                    )}
-
-                    {capResults && (
-                      <div className="border-l-2 border-primary pl-5 py-2 bg-primary/5 animate-in slide-in-from-left-4 duration-500">
-                        <h4 className="text-[12px] font-code uppercase text-primary font-bold tracking-widest mb-4">Capability Expansion Propositions</h4>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          {capResults.implicitCapabilities.map((ic: any, idx: number) => (
-                            <div key={idx} className="bg-background/50 border border-border p-4 hover:border-primary/50 transition-colors group">
-                              <div className="text-[11px] font-bold text-foreground font-headline mb-2 uppercase tracking-tight group-hover:text-primary">{ic.name}</div>
-                              <div className="text-[11px] text-muted-foreground font-body leading-relaxed">{ic.description}</div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {collResults && (
-                      <div className="border-l-2 border-chart-2 pl-5 py-2 bg-chart-2/5 animate-in slide-in-from-left-4 duration-500">
-                        <h4 className="text-[12px] font-code uppercase text-chart-2 font-bold tracking-widest mb-4">Ecosystem Collision Simulations</h4>
-                        <div className="grid grid-cols-1 gap-4">
-                          {collResults.novelSystems.map((ns: any, idx: number) => (
-                            <div key={idx} className="bg-background/50 border border-border p-4 hover:border-chart-2/50 transition-colors">
-                              <div className="flex items-center justify-between mb-3">
-                                <div className="text-[11px] font-bold text-foreground font-headline uppercase tracking-widest">{ns.name}</div>
-                                <div className="text-[10px] font-code text-chart-2 px-2 py-0.5 border border-chart-2/10 font-bold uppercase">NOVELTY: {ns.noveltyRank}%</div>
-                              </div>
-                              <div className="text-[11px] text-muted-foreground font-body leading-relaxed mb-4">{ns.description}</div>
-                              <div className="flex flex-wrap gap-2">
-                                {ns.combinedMcps.map((mcp: string) => (
-                                  <span key={mcp} className="text-[9px] font-code px-2 py-0.5 border border-border/50 text-muted-foreground bg-muted/30 uppercase tracking-tighter">{mcp}</span>
-                                ))}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {intentResults && (
-                      <div className="border-l-2 border-chart-3 pl-5 py-2 bg-chart-3/5 animate-in slide-in-from-left-4 duration-500">
-                        <h4 className="text-[12px] font-code uppercase text-chart-3 font-bold tracking-widest mb-4">Strategic Gap Analysis Matrix</h4>
-                        <div className="bg-background/50 border border-border p-4">
-                          <div className="flex items-start gap-3 text-[11px] text-muted-foreground font-body leading-relaxed mb-5 bg-muted/10 p-3">
-                            <AlertTriangle className="w-5 h-5 text-chart-3 shrink-0 mt-0.5" />
-                            <p>{intentResults.reasoning}</p>
-                          </div>
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                            {intentResults.missingTools.map((tool: string, idx: number) => (
-                              <div key={idx} className="flex items-center gap-3 p-2 bg-muted/20 border border-border/40 group hover:border-chart-3/50 transition-colors">
-                                <div className="w-1.5 h-1.5 bg-chart-3 rounded-full animate-pulse" />
-                                <span className="text-[10px] font-code text-foreground uppercase tracking-tighter group-hover:text-chart-3">{tool}</span>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {capResults.implicitCapabilities.map((ic: any, idx: number) => (
+                              <div key={idx} className="bg-background/50 border border-border p-4 hover:border-primary/50 transition-colors group">
+                                <div className="text-[11px] font-bold text-foreground font-headline mb-2 uppercase tracking-tight group-hover:text-primary">{ic.name}</div>
+                                <div className="text-[11px] text-muted-foreground font-body leading-relaxed">{ic.description}</div>
                               </div>
                             ))}
                           </div>
                         </div>
-                      </div>
-                    )}
+                      )}
+
+                      {intentResults && (
+                        <div className="border-l-2 border-chart-3 pl-5 py-2 bg-chart-3/5 animate-in slide-in-from-left-4 duration-500">
+                          <h4 className="text-[12px] font-code uppercase text-chart-3 font-bold tracking-widest mb-4">Strategic Gap Analysis Matrix</h4>
+                          <div className="bg-background/50 border border-border p-4">
+                            <div className="flex items-start gap-3 text-[11px] text-muted-foreground font-body leading-relaxed mb-5 bg-muted/10 p-3">
+                              <AlertTriangle className="w-5 h-5 text-chart-3 shrink-0 mt-0.5" />
+                              <p>{intentResults.reasoning}</p>
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                              {intentResults.missingTools.map((tool: string, idx: number) => (
+                                <div key={idx} className="flex items-center gap-3 p-2 bg-muted/20 border border-border/40 group hover:border-chart-3/50 transition-colors">
+                                  <div className="w-1.5 h-1.5 bg-chart-3 rounded-full animate-pulse" />
+                                  <span className="text-[10px] font-code text-foreground uppercase tracking-tighter group-hover:text-chart-3">{tool}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </TabsContent>
+
+                    <TabsContent value="simulations" className="mt-0">
+                      {!collResults && (
+                        <div className="flex flex-col items-center justify-center h-48 opacity-[0.05] text-center">
+                          <Layers className="w-12 h-12 mb-4" />
+                          <p className="font-code text-xs tracking-[0.5em] uppercase">No Collisions Simulated</p>
+                        </div>
+                      )}
+                      {collResults && (
+                        <div className="border-l-2 border-chart-2 pl-5 py-2 bg-chart-2/5 animate-in slide-in-from-left-4 duration-500">
+                          <h4 className="text-[12px] font-code uppercase text-chart-2 font-bold tracking-widest mb-4">Ecosystem Collision Simulations</h4>
+                          <div className="grid grid-cols-1 gap-4">
+                            {collResults.novelSystems.map((ns: any, idx: number) => (
+                              <div key={idx} className="bg-background/50 border border-border p-4 hover:border-chart-2/50 transition-colors">
+                                <div className="flex items-center justify-between mb-3">
+                                  <div className="text-[11px] font-bold text-foreground font-headline uppercase tracking-widest">{ns.name}</div>
+                                  <div className="text-[10px] font-code text-chart-2 px-2 py-0.5 border border-chart-2/10 font-bold uppercase">NOVELTY: {ns.noveltyRank}%</div>
+                                </div>
+                                <div className="text-[11px] text-muted-foreground font-body leading-relaxed mb-4">{ns.description}</div>
+                                <div className="flex flex-wrap gap-2">
+                                  {ns.combinedMcps.map((mcp: string) => (
+                                    <span key={mcp} className="text-[9px] font-code px-2 py-0.5 border border-border/50 text-muted-foreground bg-muted/30 uppercase tracking-tighter">{mcp}</span>
+                                  ))}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </TabsContent>
+
+                    <TabsContent value="evolution" className="mt-0">
+                      {!evolutionResults && (
+                        <div className="flex flex-col items-center justify-center h-48 opacity-[0.05] text-center">
+                          <Zap className="w-12 h-12 mb-4" />
+                          <p className="font-code text-xs tracking-[0.5em] uppercase">No Evolution Proposed</p>
+                        </div>
+                      )}
+                      {evolutionResults && (
+                        <div className="border-l-2 border-primary pl-5 py-2 bg-primary/5 animate-in slide-in-from-left-4 duration-500">
+                          <div className="flex items-center justify-between mb-4">
+                            <div className="flex items-center gap-3">
+                              <h4 className="text-[12px] font-code uppercase text-primary font-bold tracking-widest">Evolution Patch: {evolutionResults.target}</h4>
+                              <Badge variant="outline" className="text-[8px] uppercase border-primary/20 bg-primary/10 text-primary">Proposed</Badge>
+                            </div>
+                            <div className="flex items-center gap-2">
+                               <Button 
+                                variant="outline" 
+                                size="sm" 
+                                className="h-7 text-[9px] font-code uppercase rounded-none border-primary/30 hover:bg-primary/10"
+                                onClick={() => {
+                                  navigator.clipboard.writeText(evolutionResults.code);
+                                  toast({ title: "Copied", description: "Evolution patch code copied." });
+                                }}
+                              >
+                                <Copy className="w-3.5 h-3.5 mr-2" />
+                                Copy Patch
+                              </Button>
+                              <Button 
+                                variant="default" 
+                                size="sm" 
+                                className="h-7 text-[9px] font-code uppercase rounded-none bg-primary text-background"
+                                onClick={() => {
+                                  toast({ title: "Applied", description: `Evolution patch applied to ${evolutionResults.target}.` });
+                                }}
+                              >
+                                <GitPullRequest className="w-3.5 h-3.5 mr-2" />
+                                Apply to {evolutionResults.target.split('-')[1]}
+                              </Button>
+                            </div>
+                          </div>
+                          <div className="bg-background/80 border border-border p-5 font-code text-[11px] overflow-x-auto whitespace-pre leading-relaxed shadow-inner mb-4">
+                            {evolutionResults.code}
+                          </div>
+                          <div className="grid grid-cols-2 gap-4">
+                            <div className="bg-muted/10 p-3 border-l-2 border-primary/50">
+                              <div className="text-[9px] font-code uppercase text-muted-foreground mb-1">Impact Analysis</div>
+                              <p className="text-[10px] text-foreground leading-relaxed italic">{evolutionResults.impactAnalysis}</p>
+                            </div>
+                            <div className="bg-muted/10 p-3 border-l-2 border-primary/50">
+                              <div className="text-[9px] font-code uppercase text-muted-foreground mb-1">Files Affected</div>
+                              <div className="flex flex-wrap gap-2">
+                                {evolutionResults.filesAffected.map(f => (
+                                  <span key={f} className="text-[9px] font-code px-2 py-0.5 bg-background border border-border text-muted-foreground">{f}</span>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </TabsContent>
+
+                    <TabsContent value="code" className="mt-0">
+                      {!codeResults && (
+                        <div className="flex flex-col items-center justify-center h-48 opacity-[0.05] text-center">
+                          <Code2 className="w-12 h-12 mb-4" />
+                          <p className="font-code text-xs tracking-[0.5em] uppercase">No Code Generated</p>
+                        </div>
+                      )}
+                      {codeResults && (
+                        <div className="border-l-2 border-primary pl-5 py-2 bg-primary/5 animate-in slide-in-from-left-4 duration-500">
+                          <div className="flex items-center justify-between mb-4">
+                            <h4 className="text-[12px] font-code uppercase text-primary font-bold tracking-widest">Generated BWB-MCP-SERVER Implementation</h4>
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              className="h-8 w-8 text-primary hover:bg-primary/20 border border-primary/20 rounded-none"
+                              onClick={() => {
+                                navigator.clipboard.writeText(codeResults.code);
+                                toast({ title: "Copied", description: "Implementation code copied to clipboard." });
+                              }}
+                            >
+                              <Copy className="w-4 h-4" />
+                            </Button>
+                          </div>
+                          <div className="bg-background/80 border border-border p-5 font-code text-[11px] overflow-x-auto whitespace-pre leading-relaxed shadow-inner">
+                            {codeResults.code}
+                          </div>
+                          <div className="mt-3 flex items-start gap-3 text-[11px] text-muted-foreground bg-muted/10 p-3 border-l-2 border-muted-foreground/30">
+                            <CheckCircle2 className="w-4 h-4 text-green-500 shrink-0 mt-0.5" />
+                            <p className="italic">{codeResults.explanation}</p>
+                          </div>
+                        </div>
+                      )}
+                    </TabsContent>
                   </div>
                 </ScrollArea>
-              </div>
+              </Tabs>
             </div>
           </div>
         </div>
@@ -723,21 +828,21 @@ export default function BWBHub() {
               <AgentPanel 
                 name="Capability Agent"
                 icon={<GitBranch className="w-4 h-4" />}
-                description="Derive implicit expansion potential from existing node metadata and explicit capability definitions."
+                description="Derive implicit expansion potential from existing node metadata."
                 onExecute={runCapabilityAgent}
                 loading={loadingStates['capability']}
               />
               <AgentPanel 
                 name="Collision Agent"
                 icon={<Layers className="w-4 h-4" />}
-                description="Simulate combinatorial collisions between multiple MCP providers to discover novel emergent systems."
+                description="Simulate combinatorial collisions to discover novel systems."
                 onExecute={runCollisionAgent}
                 loading={loadingStates['collision']}
               />
               <AgentPanel 
                 name="Intent Agent"
                 icon={<Target className="w-4 h-4" />}
-                description="Cross-reference strategic objectives against synchronized capabilities to map critical technological gaps."
+                description="Map strategic goals to technological gaps."
                 onExecute={runIntentAgent}
                 loading={loadingStates['intent']}
               />
@@ -747,29 +852,27 @@ export default function BWBHub() {
               <AgentPanel 
                 name="Boilerplate Agent"
                 icon={<Code2 className="w-4 h-4" />}
-                description="Generate production-ready BWB-MCP-SERVER TypeScript implementation for the selected ecosystem target."
+                description="Generate production-ready BWB-MCP-SERVER TypeScript."
                 onExecute={runCodeAgent}
                 loading={loadingStates['code']}
               />
               
-              {simulations.length > 0 && (
+              {evolutionLogs.length > 0 && (
                 <>
                   <Separator className="my-4 bg-border/40" />
                   <div className="flex flex-col gap-3">
                     <div className="flex items-center gap-2 text-[10px] font-code uppercase text-muted-foreground font-bold tracking-[0.2em] mb-1">
-                      <History className="w-3.5 h-3.5" />
-                      <span>Simulation History</span>
+                      <Clock className="w-3.5 h-3.5" />
+                      <span>Evolution Log</span>
                     </div>
-                    {simulations.map((sim) => (
-                      <div key={sim.id} className="industrial-panel p-3 bg-muted/5 hover:bg-muted/15 transition-all cursor-pointer group border-border/40">
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="text-[9px] font-code text-muted-foreground uppercase leading-none">
-                            TICK_{formatTimestamp(sim.timestamp)}
-                          </span>
-                          <span className="text-[9px] font-code text-primary font-bold leading-none uppercase">{sim.results?.length || 0} Nodes</span>
+                    {evolutionLogs.map((log: any) => (
+                      <div key={log.id} className="industrial-panel p-3 bg-muted/5 hover:bg-muted/15 transition-all cursor-pointer group border-border/40">
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-[9px] font-code text-primary font-bold leading-none uppercase">{log.target}</span>
+                          <span className="text-[9px] font-code text-muted-foreground uppercase leading-none">{formatTimestamp(log.timestamp)}</span>
                         </div>
-                        <div className="text-[10px] font-headline text-foreground truncate uppercase font-bold group-hover:text-primary transition-colors">
-                          {sim.results?.[0]?.name || 'UNTITLED_SIM'}
+                        <div className="text-[10px] font-body text-foreground line-clamp-2 leading-relaxed opacity-70">
+                          {log.description}
                         </div>
                       </div>
                     ))}

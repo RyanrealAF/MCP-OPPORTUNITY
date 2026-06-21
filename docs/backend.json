@@ -60,6 +60,19 @@
         }
       },
       "required": ["timestamp", "results"]
+    },
+    "EvolutionHistory": {
+      "title": "Evolution History",
+      "description": "A record of code modifications applied via the Evolution Agent.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "target": { "type": "string" },
+        "description": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "status": { "type": "string", "enum": ["proposed", "applied", "rejected"] }
+      },
+      "required": ["target", "description", "timestamp", "status"]
     }
   },
   "auth": {
@@ -77,6 +90,10 @@
     "/users/{userId}/simulations/{simId}": {
       "schema": { "$ref": "#/backend/entities/Simulation" },
       "description": "Historical collision agent simulation results."
+    },
+    "/users/{userId}/evolution_logs/{logId}": {
+      "schema": { "$ref": "#/backend/entities/EvolutionHistory" },
+      "description": "Logs of ecosystem modifications."
     }
   }
 }
