@@ -5,7 +5,7 @@
  */
 
 import { ai } from '@/ai/genkit';
-import { z } from 'genkit';
+import { z } from 'zod';
 
 const EvolutionAgentInputSchema = z.object({
   target: z.enum(['BWB-ROOT', 'BWB-CODE-ASSISTANT', 'BWB-MCP-SERVER']).describe('The target repository to modify.'),
