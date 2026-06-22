@@ -636,7 +636,7 @@ export default function BWBHub() {
 
               <AgentPanel name="Capability Agent" icon={<GitBranch className="w-4 h-4" />} description="Analyze implicit expansion potential." onExecute={runCapabilityAgent} loading={loadingStates['capability']} />
               <AgentPanel name="Collision Agent" icon={<Layers className="w-4 h-4" />} description="Simulate combinatorial collisions." onExecute={runCollisionAgent} loading={loadingStates['collision']} />
-              <AgentPanel name="Agent Panel" icon={<Target className="w-4 h-4" />} description="Map strategic gaps for goals." onExecute={runIntentAgent} loading={loadingStates['intent']} />
+              <AgentPanel name="Intent Agent" icon={<Target className="w-4 h-4" />} description="Map strategic gaps for goals." onExecute={runIntentAgent} loading={loadingStates['intent']} />
               <AgentPanel name="Boilerplate Agent" icon={<Code2 className="w-4 h-4" />} description="Generate industrial code." onExecute={runCodeAgent} loading={loadingStates['code']} />
             </div>
           </ScrollArea>
