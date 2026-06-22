@@ -50,6 +50,7 @@ export default function BWBHub() {
   
   const [isMcpEditorOpen, setIsMcpEditorOpen] = useState(false);
   const [editingMcp, setEditingMcp] = useState<Partial<MCP> | null>(null);
+  const [isSigningIn, setIsSigningIn] = useState(false);
 
   const terminalEndRef = useRef<HTMLDivElement>(null);
 
@@ -303,27 +304,45 @@ export default function BWBHub() {
   };
 
   const handleSignIn = async () => {
-    if (!auth) return;
+    console.log('Initiating sign-in sequence...');
+    if (!auth) {
+      console.error('Sign-in failed: Firebase Auth instance not initialized.');
+      toast({ 
+        title: "Kernel Error", 
+        description: "Authentication service is unavailable. Check system logs.", 
+        variant: "destructive" 
+      });
+      return;
+    }
+
+    setIsSigningIn(true);
     try {
       const provider = new GoogleAuthProvider();
-      await signInWithPopup(auth, provider);
+      // Adding explicit hint to ensure the popup isn't silently blocked or failing
+      provider.setCustomParameters({ prompt: 'select_account' });
+      
+      const result = await signInWithPopup(auth, provider);
+      console.log('Sign-in successful for:', result.user.email);
       addLog('Authentication successful. Session established.', 'info');
     } catch (error: any) {
-      console.error('Sign-in Error:', error);
+      console.error('Sign-in process fault:', error);
       
       let errorMessage = error.message;
       if (error.code === 'auth/unauthorized-domain') {
-        errorMessage = "Unauthorized Domain: Please add this domain to the 'Authorized Domains' list in your Firebase Console (Authentication > Settings).";
-        addLog(`CRITICAL: Domain not authorized. Update Firebase Console settings.`, 'error');
-      } else {
-        addLog(`Auth Error: ${error.message}`, 'error');
+        errorMessage = "Domain not authorized. Please add this workspace domain to the Authorized Domains list in the Firebase Console.";
+      } else if (error.code === 'auth/popup-blocked') {
+        errorMessage = "Sign-in popup blocked by browser. Please allow popups for this site.";
+      } else if (error.code === 'auth/configuration-not-found') {
+        errorMessage = "Google Auth is not enabled in the Firebase Console.";
       }
 
       toast({ 
-        title: "Authentication Failed", 
+        title: "Connection Failed", 
         description: errorMessage, 
         variant: "destructive" 
       });
+    } finally {
+      setIsSigningIn(false);
     }
   };
 
@@ -367,9 +386,19 @@ export default function BWBHub() {
                 <span>SERVER</span>
               </div>
             </div>
-            <Button onClick={handleSignIn} className="w-full font-code uppercase tracking-widest rounded-none h-14 bg-primary text-background hover:bg-primary/90 transition-all">
-              Initialize Connection
+            <Button 
+              onClick={handleSignIn} 
+              disabled={isSigningIn}
+              className="w-full font-code uppercase tracking-widest rounded-none h-14 bg-primary text-background hover:bg-primary/90 transition-all disabled:opacity-50"
+            >
+              {isSigningIn ? (
+                <Activity className="w-5 h-5 animate-spin mr-2" />
+              ) : null}
+              {isSigningIn ? 'Establishing Link...' : 'Initialize Connection'}
             </Button>
+            <p className="text-[9px] font-code text-muted-foreground uppercase opacity-40 text-center">
+              INDUSTRIAL PROTOCOL V4.2 // SECURE UPLINK REQUIRED
+            </p>
           </CardContent>
         </Card>
       </div>
@@ -774,7 +803,7 @@ export default function BWBHub() {
           </div>
         </div>
         <div className="flex items-center gap-6 text-[9px] font-code uppercase tracking-widest">
-          <span className="text-muted-foreground opacity-60">AUTH_SIG: <span className="text-foreground font-bold">{user?.email?.split('@')[0]}</span></span>
+          <span className="text-muted-foreground opacity-60">AUTH_SIG: <span className="text-foreground font-bold">{user?.email?.split('@')[0] || 'GUEST'}</span></span>
           <Separator orientation="vertical" className="h-3 opacity-30" />
           <span className="text-primary font-bold animate-pulse">SYSTEM_UPLINK_STABLE</span>
         </div>
