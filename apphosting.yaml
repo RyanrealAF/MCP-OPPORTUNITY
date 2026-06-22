@@ -2,10 +2,10 @@
 # https://firebase.google.com/docs/app-hosting/configure
 
 runConfig:
-  # Resource allocation for high-density AI orchestration
-  maxInstances: 2
+  # Enhanced resource allocation for high-density GenAI orchestration
+  maxInstances: 4
   cpu: 1
-  memoryMiB: 1024
+  memoryMiB: 2048
 
 env:
   - variable: GEMINI_API_KEY
