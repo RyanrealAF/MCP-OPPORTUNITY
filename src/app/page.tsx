@@ -2,7 +2,7 @@
 
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { 
-  Database, Cpu, GitBranch, Target, LayoutGrid, FileSearch, Settings2, Plus, Layers, Search, LogOut, Code2, 
+  Database, Cpu, GitBranch, Target, LayoutGrid, FileSearch, Settings2, Plus, Layers, Search, Code2, 
   CheckCircle2, AlertTriangle, History, ChevronRight, Terminal as TerminalIcon, Activity, Boxes, 
   Network, Zap, GitPullRequest, RefreshCw, HardDrive, Save, Clock, Edit3, Trash2, Image as ImageIcon
 } from 'lucide-react';
@@ -21,9 +21,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 
-import { useAuth, useUser, useFirestore, useCollection } from '@/firebase';
-import { collection, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, query, orderBy, limit } from 'firebase/firestore';
-import { GoogleAuthProvider, signInWithPopup, signOut } from 'firebase/auth';
+import { useFirestore, useCollection } from '@/firebase';
+import { collection, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, query, orderBy } from 'firebase/firestore';
 import { cn } from '@/lib/utils';
 
 import { identifyImplicitCapabilities } from '@/ai/flows/identify-implicit-capabilities-flow';
@@ -32,11 +31,11 @@ import { generateNovelSystems } from '@/ai/flows/generate-novel-systems';
 import { generateMcpBoilerplate } from '@/ai/flows/generate-mcp-boilerplate';
 import { executeEvolution } from '@/ai/flows/evolution-agent-flow';
 import { generateMcpIcon } from '@/ai/flows/generate-mcp-icon-flow';
-import { MCP, Goal, Simulation, RepositoryTarget, EvolutionAgentOutput } from '@/lib/mcp-store';
+import { MCP, Goal, RepositoryTarget, EvolutionAgentOutput } from '@/lib/mcp-store';
+
+const SINGLE_USER_ID = 'bwb-admin-01';
 
 export default function BWBHub() {
-  const { user, loading: authLoading } = useUser();
-  const auth = useAuth();
   const db = useFirestore();
   const { toast } = useToast();
 
@@ -46,11 +45,10 @@ export default function BWBHub() {
   const [evolutionTarget, setEvolutionTarget] = useState<RepositoryTarget>('BWB-MCP-SERVER');
   const [evolutionInstruction, setEvolutionInstruction] = useState('');
   const [activeTab, setActiveTab] = useState('insights');
-  const [logs, setLogs] = useState<{ id: string; msg: string; type: 'info' | 'warn' | 'error' | 'ai'; time: string }[]>([]);
+  const [logs, setLogs] = useState<{ id: string; msg: string; type: 'info' | 'warn' | 'error' | 'ai' | 'status'; time: string }[]>([]);
   
   const [isMcpEditorOpen, setIsMcpEditorOpen] = useState(false);
   const [editingMcp, setEditingMcp] = useState<Partial<MCP> | null>(null);
-  const [isSigningIn, setIsSigningIn] = useState(false);
 
   const terminalEndRef = useRef<HTMLDivElement>(null);
 
@@ -67,19 +65,19 @@ export default function BWBHub() {
     terminalEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [logs]);
 
-  const addLog = (msg: string, type: 'info' | 'warn' | 'error' | 'ai' = 'info') => {
+  const addLog = (msg: string, type: 'info' | 'warn' | 'error' | 'ai' | 'status' = 'info') => {
     setLogs(prev => [...prev, { id: Math.random().toString(), msg, type, time: new Date().toLocaleTimeString() }].slice(-50));
   };
 
   const mcpsQuery = useMemo(() => {
-    if (!db || !user) return null;
-    return query(collection(db, 'users', user.uid, 'mcps'), orderBy('updatedAt', 'desc'));
-  }, [db, user]);
+    if (!db) return null;
+    return query(collection(db, 'users', SINGLE_USER_ID, 'mcps'), orderBy('updatedAt', 'desc'));
+  }, [db]);
 
   const goalsQuery = useMemo(() => {
-    if (!db || !user) return null;
-    return query(collection(db, 'users', user.uid, 'goals'), orderBy('updatedAt', 'desc'));
-  }, [db, user]);
+    if (!db) return null;
+    return query(collection(db, 'users', SINGLE_USER_ID, 'goals'), orderBy('updatedAt', 'desc'));
+  }, [db]);
 
   const { data: mcps = [] } = useCollection<MCP>(mcpsQuery);
   const { data: goals = [] } = useCollection<Goal>(goalsQuery);
@@ -148,8 +146,8 @@ export default function BWBHub() {
       });
       setCollResults(result);
       
-      if (db && user) {
-        addDoc(collection(db, `users/${user.uid}/simulations`), {
+      if (db) {
+        addDoc(collection(db, `users/${SINGLE_USER_ID}/simulations`), {
           timestamp: serverTimestamp(),
           results: result.novelSystems
         });
@@ -229,8 +227,8 @@ export default function BWBHub() {
       });
       setEvolutionResults(result);
       
-      if (db && user) {
-        addDoc(collection(db, `users/${user.uid}/evolution_logs`), {
+      if (db) {
+        addDoc(collection(db, `users/${SINGLE_USER_ID}/evolution_logs`), {
           target: evolutionTarget,
           description: evolutionInstruction,
           timestamp: serverTimestamp(),
@@ -247,14 +245,14 @@ export default function BWBHub() {
   };
 
   const runIconGeneration = async (mcp: MCP) => {
-    if (!db || !user) return;
+    if (!db) return;
     addLog(`Generating industrial icon for ${mcp.name}...`, 'ai');
     try {
       const result = await generateMcpIcon({
         name: mcp.name,
         description: mcp.description
       });
-      const mcpRef = doc(db, 'users', user.uid, 'mcps', mcp.id);
+      const mcpRef = doc(db, 'users', SINGLE_USER_ID, 'mcps', mcp.id);
       await updateDoc(mcpRef, {
         iconUrl: result.iconDataUri,
         updatedAt: serverTimestamp()
@@ -268,8 +266,8 @@ export default function BWBHub() {
   };
 
   const handleUpdateMcp = () => {
-    if (!db || !user || !editingMcp?.id) return;
-    const mcpRef = doc(db, 'users', user.uid, 'mcps', editingMcp.id);
+    if (!db || !editingMcp?.id) return;
+    const mcpRef = doc(db, 'users', SINGLE_USER_ID, 'mcps', editingMcp.id);
     updateDoc(mcpRef, {
       ...editingMcp,
       updatedAt: serverTimestamp()
@@ -280,16 +278,16 @@ export default function BWBHub() {
   };
 
   const handleDeleteMcp = (id: string) => {
-    if (!db || !user || !confirm('Permanently decommission this node?')) return;
-    deleteDoc(doc(db, 'users', user.uid, 'mcps', id)).then(() => {
+    if (!db || !confirm('Permanently decommission this node?')) return;
+    deleteDoc(doc(db, 'users', SINGLE_USER_ID, 'mcps', id)).then(() => {
       addLog(`Node ${id} decommissioned from registry.`, 'warn');
       if (selectedMcp?.id === id) setSelectedMcp(null);
     });
   };
 
   const handleAddMcp = () => {
-    if (!db || !user) return;
-    const path = `users/${user.uid}/mcps`;
+    if (!db) return;
+    const path = `users/${SINGLE_USER_ID}/mcps`;
     const data = {
       name: 'New Provider Node',
       description: 'Define the functional scope and integration parameters.',
@@ -303,104 +301,13 @@ export default function BWBHub() {
     addLog('New node initialized in registry.', 'info');
   };
 
-  const handleSignIn = async () => {
-    console.log('Initiating sign-in sequence...');
-    if (!auth) {
-      console.error('Sign-in failed: Firebase Auth instance not initialized.');
-      toast({ 
-        title: "Kernel Error", 
-        description: "Authentication service is unavailable. Check system logs.", 
-        variant: "destructive" 
-      });
-      return;
-    }
-
-    setIsSigningIn(true);
-    try {
-      const provider = new GoogleAuthProvider();
-      // Adding explicit hint to ensure the popup isn't silently blocked or failing
-      provider.setCustomParameters({ prompt: 'select_account' });
-      
-      const result = await signInWithPopup(auth, provider);
-      console.log('Sign-in successful for:', result.user.email);
-      addLog('Authentication successful. Session established.', 'info');
-    } catch (error: any) {
-      console.error('Sign-in process fault:', error);
-      
-      let errorMessage = error.message;
-      if (error.code === 'auth/unauthorized-domain') {
-        errorMessage = "Domain not authorized. Please add this workspace domain to the Authorized Domains list in the Firebase Console.";
-      } else if (error.code === 'auth/popup-blocked') {
-        errorMessage = "Sign-in popup blocked by browser. Please allow popups for this site.";
-      } else if (error.code === 'auth/configuration-not-found') {
-        errorMessage = "Google Auth is not enabled in the Firebase Console.";
-      }
-
-      toast({ 
-        title: "Connection Failed", 
-        description: errorMessage, 
-        variant: "destructive" 
-      });
-    } finally {
-      setIsSigningIn(false);
-    }
-  };
-
-  const handleSignOut = async () => {
-    if (!auth) return;
-    await signOut(auth);
-    addLog('Interface disconnected. Session terminated.', 'warn');
-  };
-
-  if (authLoading || !mounted) {
+  if (!mounted) {
     return (
       <div className="h-screen flex items-center justify-center bg-background">
         <div className="flex flex-col items-center gap-4">
           <TerminalIcon className="w-10 h-10 text-primary animate-pulse" />
           <div className="font-code text-xs text-primary uppercase tracking-[0.5em]">INITIALIZING_HUB_INTERFACE...</div>
         </div>
-      </div>
-    );
-  }
-
-  if (!user) {
-    return (
-      <div className="h-screen flex items-center justify-center bg-background p-6 relative overflow-hidden">
-        <div className="scanline-overlay" />
-        <div className="absolute inset-0 grid-bg opacity-10" />
-        <Card className="max-w-md w-full industrial-panel bg-card border-primary/20 z-10">
-          <CardContent className="p-10 flex flex-col items-center gap-8">
-            <div className="relative">
-              <div className="w-20 h-20 bg-primary/5 border border-primary/30 flex items-center justify-center">
-                <Boxes className="w-10 h-10 text-primary" />
-              </div>
-              <div className="absolute -bottom-2 -right-2 w-4 h-4 bg-primary animate-ping opacity-20" />
-            </div>
-            <div className="text-center">
-              <h1 className="font-code text-2xl font-bold text-primary mb-3 tracking-tighter uppercase">BWB // HUB</h1>
-              <div className="flex items-center justify-center gap-3 text-[10px] text-muted-foreground font-code uppercase tracking-widest opacity-60">
-                <span>ROOT</span>
-                <ChevronRight className="w-3 h-3" />
-                <span className="text-primary font-bold">ASSISTANT</span>
-                <ChevronRight className="w-3 h-3" />
-                <span>SERVER</span>
-              </div>
-            </div>
-            <Button 
-              onClick={handleSignIn} 
-              disabled={isSigningIn}
-              className="w-full font-code uppercase tracking-widest rounded-none h-14 bg-primary text-background hover:bg-primary/90 transition-all disabled:opacity-50"
-            >
-              {isSigningIn ? (
-                <Activity className="w-5 h-5 animate-spin mr-2" />
-              ) : null}
-              {isSigningIn ? 'Establishing Link...' : 'Initialize Connection'}
-            </Button>
-            <p className="text-[9px] font-code text-muted-foreground uppercase opacity-40 text-center">
-              INDUSTRIAL PROTOCOL V4.2 // SECURE UPLINK REQUIRED
-            </p>
-          </CardContent>
-        </Card>
       </div>
     );
   }
@@ -547,18 +454,6 @@ export default function BWBHub() {
               )}
             </div>
           </ScrollArea>
-          
-          <div className="p-4 border-t border-border bg-card">
-            <Button 
-              variant="destructive" 
-              size="sm" 
-              onClick={handleSignOut}
-              className="w-full h-11 font-code uppercase text-[10px] tracking-[0.2em] rounded-none bg-red-950/20 border border-red-500/30 hover:bg-red-900/40 text-red-500 transition-all"
-            >
-              <LogOut className="w-4 h-4 mr-2" />
-              Disconnect Interface
-            </Button>
-          </div>
         </div>
 
         <div className="flex-1 flex flex-col bg-background relative z-10">
@@ -803,7 +698,7 @@ export default function BWBHub() {
           </div>
         </div>
         <div className="flex items-center gap-6 text-[9px] font-code uppercase tracking-widest">
-          <span className="text-muted-foreground opacity-60">AUTH_SIG: <span className="text-foreground font-bold">{user?.email?.split('@')[0] || 'GUEST'}</span></span>
+          <span className="text-muted-foreground opacity-60">AUTH_SIG: <span className="text-foreground font-bold">ADMIN</span></span>
           <Separator orientation="vertical" className="h-3 opacity-30" />
           <span className="text-primary font-bold animate-pulse">SYSTEM_UPLINK_STABLE</span>
         </div>
