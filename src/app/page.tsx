@@ -2,9 +2,26 @@
 
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { 
-  Database, Cpu, GitBranch, Target, LayoutGrid, FileSearch, Settings2, Plus, Layers, Search, Code2, 
-  CheckCircle2, AlertTriangle, History, ChevronRight, Terminal as TerminalIcon, Activity, Boxes, 
-  Network, Zap, GitPullRequest, RefreshCw, HardDrive, Save, Clock, Edit3, Trash2, Image as ImageIcon
+  Database, 
+  Cpu, 
+  GitBranch, 
+  Target, 
+  LayoutGrid,
+  FileSearch,
+  Settings2,
+  Plus,
+  Layers,
+  Search,
+  LogOut,
+  Code2,
+  Copy,
+  CheckCircle2,
+  AlertTriangle,
+  History,
+  ChevronRight,
+  Terminal,
+  Activity,
+  Boxes
 } from 'lucide-react';
 import { KnowledgeGraph } from '@/components/dashboard/KnowledgeGraph';
 import { AgentPanel } from '@/components/dashboard/AgentPanel';
@@ -21,9 +38,11 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 
-import { useFirestore, useCollection } from '@/firebase';
-import { collection, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, query, orderBy } from 'firebase/firestore';
+import { useFirestore, useCollection, useUser, useAuth } from '@/firebase';
+import { collection, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, query, orderBy, Timestamp, limit } from 'firebase/firestore';
+import { GoogleAuthProvider, signInWithPopup, signOut } from 'firebase/auth';
 import { cn } from '@/lib/utils';
+import { errorEmitter, FirestorePermissionError } from '@/lib/errors';
 
 import { identifyImplicitCapabilities } from '@/ai/flows/identify-implicit-capabilities-flow';
 import { identifyMissingToolsForGoals } from '@/ai/flows/identify-missing-tools-for-goals';
@@ -31,11 +50,12 @@ import { generateNovelSystems } from '@/ai/flows/generate-novel-systems';
 import { generateMcpBoilerplate } from '@/ai/flows/generate-mcp-boilerplate';
 import { executeEvolution } from '@/ai/flows/evolution-agent-flow';
 import { generateMcpIcon } from '@/ai/flows/generate-mcp-icon-flow';
-import { MCP, Goal, RepositoryTarget, EvolutionAgentOutput } from '@/lib/mcp-store';
+import { MCP, Goal, RepositoryTarget, EvolutionAgentOutput, Simulation } from '@/lib/mcp-store';
 
-const SINGLE_USER_ID = 'bwb-admin-01';
 
 export default function BWBHub() {
+  const { user, loading: authLoading } = useUser();
+  const auth = useAuth();
   const db = useFirestore();
   const { toast } = useToast();
 
@@ -70,17 +90,24 @@ export default function BWBHub() {
   };
 
   const mcpsQuery = useMemo(() => {
-    if (!db) return null;
-    return query(collection(db, 'users', SINGLE_USER_ID, 'mcps'), orderBy('updatedAt', 'desc'));
-  }, [db]);
+    if (!db || !user) return null;
+    return query(collection(db, 'users', user.uid, 'mcps'), orderBy('updatedAt', 'desc'));
+  }, [db, user]);
 
   const goalsQuery = useMemo(() => {
-    if (!db) return null;
-    return query(collection(db, 'users', SINGLE_USER_ID, 'goals'), orderBy('updatedAt', 'desc'));
-  }, [db]);
+    if (!db || !user) return null;
+    return query(collection(db, 'users', user.uid, 'goals'), orderBy('updatedAt', 'desc'));
+  }, [db, user]);
+
+  const simQuery = useMemo(() => {
+    if (!db || !user) return null;
+    return query(collection(db, 'users', user.uid, 'simulations'), orderBy('timestamp', 'desc'), limit(10));
+  }, [db, user]);
 
   const { data: mcps = [] } = useCollection<MCP>(mcpsQuery);
   const { data: goals = [] } = useCollection<Goal>(goalsQuery);
+  const { data: simulations = [] } = useCollection<Simulation>(simQuery);
+
 
   const [registrySearch, setRegistrySearch] = useState('');
   
@@ -111,11 +138,9 @@ export default function BWBHub() {
       return;
     }
     toggleLoading('capability', true);
-    addLog('Executing Capability Agent: Analyzing implicit potential...', 'ai');
     setCapResults(null);
-    setActiveTab('insights');
     try {
-      const desc = mcps.map((m: any) => `${m.name || 'Unnamed'}: ${m.description || 'No description'}`).join('\n');
+      const desc = mcps.map((m: any) => `${m.name || 'Unnamed'}: ${m.description || 'No description'}`).join('\\n');
       const result = await identifyImplicitCapabilities({ mcpDescriptions: desc });
       setCapResults(result);
       addLog(`Capability Agent completed. Identified ${result.implicitCapabilities.length} latent functions.`, 'info');
@@ -133,9 +158,7 @@ export default function BWBHub() {
       return;
     }
     toggleLoading('collision', true);
-    addLog('Executing Collision Agent: Simulating system emergence...', 'ai');
     setCollResults(null);
-    setActiveTab('simulations');
     try {
       const mcpDescs = mcps.map((m: any) => m.description || 'No description');
       const capDescs = mcps.flatMap((m: any) => m.explicitCapabilities || []);
@@ -146,8 +169,8 @@ export default function BWBHub() {
       });
       setCollResults(result);
       
-      if (db) {
-        addDoc(collection(db, `users/${SINGLE_USER_ID}/simulations`), {
+      if (db && user) {
+        addDoc(collection(db, `users/${user.uid}/simulations`), {
           timestamp: serverTimestamp(),
           results: result.novelSystems
         });
@@ -167,9 +190,7 @@ export default function BWBHub() {
       return;
     }
     toggleLoading('intent', true);
-    addLog('Executing Intent Agent: Mapping strategic gaps...', 'ai');
     setIntentResults(null);
-    setActiveTab('insights');
     try {
       const result = await identifyMissingToolsForGoals({
         goals: goals.map((g: any) => g.title || 'Untitled Goal'),
@@ -187,13 +208,15 @@ export default function BWBHub() {
 
   const runCodeAgent = async () => {
     if (!selectedMcp) {
-      toast({ title: "Target Selection Required", description: "Select an MCP from the registry.", variant: "destructive" });
+      toast({
+        title: "Target Selection Required",
+        description: "Select an MCP from the registry to generate BWB-MCP-SERVER boilerplate.",
+        variant: "destructive"
+      });
       return;
     }
     toggleLoading('code', true);
-    addLog(`Executing Boilerplate Agent for target: ${selectedMcp.name}...`, 'ai');
     setCodeResults(null);
-    setActiveTab('code');
     try {
       const result = await generateMcpBoilerplate({
         name: selectedMcp.name || 'UnnamedProvider',
@@ -227,8 +250,8 @@ export default function BWBHub() {
       });
       setEvolutionResults(result);
       
-      if (db) {
-        addDoc(collection(db, `users/${SINGLE_USER_ID}/evolution_logs`), {
+      if (db && user) {
+        addDoc(collection(db, `users/${user.uid}/evolution_logs`), {
           target: evolutionTarget,
           description: evolutionInstruction,
           timestamp: serverTimestamp(),
@@ -245,14 +268,14 @@ export default function BWBHub() {
   };
 
   const runIconGeneration = async (mcp: MCP) => {
-    if (!db) return;
+    if (!db || !user) return;
     addLog(`Generating industrial icon for ${mcp.name}...`, 'ai');
     try {
       const result = await generateMcpIcon({
         name: mcp.name,
         description: mcp.description
       });
-      const mcpRef = doc(db, 'users', SINGLE_USER_ID, 'mcps', mcp.id);
+      const mcpRef = doc(db, 'users', user.uid, 'mcps', mcp.id);
       await updateDoc(mcpRef, {
         iconUrl: result.iconDataUri,
         updatedAt: serverTimestamp()
@@ -266,8 +289,8 @@ export default function BWBHub() {
   };
 
   const handleUpdateMcp = () => {
-    if (!db || !editingMcp?.id) return;
-    const mcpRef = doc(db, 'users', SINGLE_USER_ID, 'mcps', editingMcp.id);
+    if (!db || !editingMcp?.id || !user) return;
+    const mcpRef = doc(db, 'users', user.uid, 'mcps', editingMcp.id);
     updateDoc(mcpRef, {
       ...editingMcp,
       updatedAt: serverTimestamp()
@@ -278,16 +301,16 @@ export default function BWBHub() {
   };
 
   const handleDeleteMcp = (id: string) => {
-    if (!db || !confirm('Permanently decommission this node?')) return;
-    deleteDoc(doc(db, 'users', SINGLE_USER_ID, 'mcps', id)).then(() => {
+    if (!db || !user || !confirm('Permanently decommission this node?')) return;
+    deleteDoc(doc(db, 'users', user.uid, 'mcps', id)).then(() => {
       addLog(`Node ${id} decommissioned from registry.`, 'warn');
       if (selectedMcp?.id === id) setSelectedMcp(null);
     });
   };
 
   const handleAddMcp = () => {
-    if (!db) return;
-    const path = `users/${SINGLE_USER_ID}/mcps`;
+    if (!db || !user) return;
+    const path = `users/${user.uid}/mcps`;
     const data = {
       name: 'New Provider Node',
       description: 'Define the functional scope and integration parameters.',
@@ -297,17 +320,82 @@ export default function BWBHub() {
       status: 'experimental',
       updatedAt: serverTimestamp()
     };
-    addDoc(collection(db, path), data);
-    addLog('New node initialized in registry.', 'info');
+
+    addDoc(collection(db, path), data).catch(async (err) => {
+      const permissionError = new FirestorePermissionError({
+        path,
+        operation: 'create',
+        requestResourceData: data,
+      });
+      errorEmitter.emit('permission-error', permissionError);
+    });
   };
 
-  if (!mounted) {
+  const handleAddGoal = () => {
+    if (!db || !user) return;
+    const path = `users/${user.uid}/goals`;
+    const data = {
+      title: 'Define Strategic Objective',
+      status: 'pending',
+      updatedAt: serverTimestamp()
+    };
+
+    addDoc(collection(db, path), data).catch(async (err) => {
+      const permissionError = new FirestorePermissionError({
+        path,
+        operation: 'create',
+        requestResourceData: data,
+      });
+      errorEmitter.emit('permission-error', permissionError);
+    });
+  };
+
+  const formatTimestamp = (ts: any) => {
+    if (!ts) return 'N/A';
+    if (ts instanceof Timestamp) return ts.toDate().toLocaleTimeString();
+    if (ts?.toDate) return ts.toDate().toLocaleTimeString();
+    return 'Recent';
+  };
+
+  if (authLoading || !mounted) {
     return (
       <div className="h-screen flex items-center justify-center bg-background">
         <div className="flex flex-col items-center gap-4">
-          <TerminalIcon className="w-10 h-10 text-primary animate-pulse" />
+          <Terminal className="w-10 h-10 text-primary animate-pulse" />
           <div className="font-code text-xs text-primary uppercase tracking-[0.5em]">INITIALIZING_HUB_INTERFACE...</div>
         </div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <div className="h-screen flex items-center justify-center bg-background p-6 relative overflow-hidden">
+        <div className="scanline-overlay" />
+        <div className="absolute inset-0 grid-bg opacity-10" />
+        <Card className="max-w-md w-full industrial-panel bg-card border-primary/20 z-10">
+          <CardContent className="p-10 flex flex-col items-center gap-8">
+            <div className="relative">
+              <div className="w-20 h-20 bg-primary/5 border border-primary/30 flex items-center justify-center">
+                <Boxes className="w-10 h-10 text-primary" />
+              </div>
+              <div className="absolute -bottom-2 -right-2 w-4 h-4 bg-primary animate-ping opacity-20" />
+            </div>
+            <div className="text-center">
+              <h1 className="font-code text-2xl font-bold text-primary mb-3 tracking-tighter uppercase">BWB // HUB</h1>
+              <div className="flex items-center justify-center gap-3 text-[10px] text-muted-foreground font-code uppercase tracking-widest opacity-60">
+                <span>ROOT</span>
+                <ChevronRight className="w-3 h-3" />
+                <span className="text-primary font-bold">ASSISTANT</span>
+                <ChevronRight className="w-3 h-3" />
+                <span>SERVER</span>
+              </div>
+            </div>
+            <Button onClick={() => signInWithPopup(auth!, new GoogleAuthProvider())} className="w-full font-code uppercase tracking-widest rounded-none h-14 bg-primary text-background hover:bg-primary/90 transition-all">
+              Initialize Connection
+            </Button>
+          </CardContent>
+        </Card>
       </div>
     );
   }
@@ -326,11 +414,13 @@ export default function BWBHub() {
               <h1 className="font-code text-base font-bold tracking-tighter uppercase text-primary leading-none">BWB-CODE-ASSISTANT</h1>
               <div className="flex items-center gap-2 mt-1">
                 <div className="status-glow-green" />
-                <span className="text-[9px] font-code text-muted-foreground uppercase tracking-widest">Enhanced Node Orchestrator</span>
+                <span className="text-[9px] font-code text-muted-foreground uppercase tracking-widest">Active Node Orchestrator</span>
               </div>
             </div>
           </div>
+          
           <Separator orientation="vertical" className="h-8 opacity-30" />
+          
           <div className="flex items-center gap-4 text-[10px] font-code uppercase tracking-widest text-muted-foreground">
             <div className="flex items-center gap-1.5 px-2 py-1 bg-muted/20 border border-border">
               <span className="opacity-50">Repo:</span>
@@ -352,8 +442,12 @@ export default function BWBHub() {
         <div className="flex items-center gap-6">
           <div className="flex items-center gap-6 pr-4">
             <div className="text-right">
-              <div className="text-[9px] font-code text-muted-foreground uppercase leading-none mb-1">Active Hub Nodes</div>
+              <div className="text-[9px] font-code text-muted-foreground uppercase leading-none mb-1">Synchronized Nodes</div>
               <div className="text-xs font-code text-primary leading-none font-bold">{mcps.length}</div>
+            </div>
+            <div className="text-right">
+              <div className="text-[9px] font-code text-muted-foreground uppercase leading-none mb-1">Latency Metrics</div>
+              <div className="text-xs font-code text-primary leading-none font-bold">12ms</div>
             </div>
           </div>
           <Button variant="outline" size="icon" className="h-9 w-9 rounded-none border-border bg-muted/10 hover:bg-muted/20">
@@ -392,7 +486,7 @@ export default function BWBHub() {
               {filteredMcps.length === 0 ? (
                 <div className="p-8 text-center opacity-20 flex flex-col items-center gap-4">
                   <Boxes className="w-12 h-12" />
-                  <p className="text-[10px] font-code uppercase tracking-[0.2em]">No Nodes Found</p>
+                  <p className="text-[10px] font-code uppercase tracking-[0.2em] leading-relaxed">No Nodes Identified</p>
                 </div>
               ) : (
                 filteredMcps.map((mcp) => (
@@ -402,172 +496,200 @@ export default function BWBHub() {
                     className={`industrial-panel p-3 transition-all cursor-pointer group ${selectedMcp?.id === mcp.id ? 'border-primary ring-1 ring-primary/20 bg-primary/5' : 'hover:border-primary/40 hover:bg-muted/10'}`}
                   >
                     <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center gap-2">
-                        {mcp.iconUrl ? (
-                          <img src={mcp.iconUrl} alt={mcp.name} className="w-6 h-6 border border-primary/20 p-0.5" />
-                        ) : (
-                          <div className="w-6 h-6 border border-border flex items-center justify-center">
-                            <ImageIcon className="w-3 h-3 text-muted-foreground" />
-                          </div>
-                        )}
-                        <span className="text-[9px] font-code text-muted-foreground uppercase tracking-widest">UID_{mcp.id?.slice(-4).toUpperCase()}</span>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <Button 
-                          variant="ghost" 
-                          size="icon" 
-                          className="h-5 w-5 hover:text-primary"
-                          onClick={(e) => { e.stopPropagation(); setEditingMcp(mcp); setIsMcpEditorOpen(true); }}
-                        >
-                          <Edit3 className="w-3 h-3" />
-                        </Button>
-                        <Button 
-                          variant="ghost" 
-                          size="icon" 
-                          className="h-5 w-5 hover:text-destructive"
-                          onClick={(e) => { e.stopPropagation(); handleDeleteMcp(mcp.id); }}
-                        >
-                          <Trash2 className="w-3 h-3" />
-                        </Button>
-                      </div>
+                      <span className="text-[9px] font-code text-muted-foreground uppercase tracking-widest">UID_{mcp.id?.slice(-8).toUpperCase()}</span>
+                      <Badge variant="outline" className={`text-[8px] h-4 px-1.5 rounded-none uppercase border-border font-code ${mcp.status === 'active' ? 'text-green-500 border-green-500/20 bg-green-500/5' : 'text-primary border-primary/20'}`}>
+                        {mcp.status}
+                      </Badge>
                     </div>
-                    <h3 className="text-sm font-bold text-foreground mb-1 font-headline uppercase tracking-tighter group-hover:text-primary">{mcp.name}</h3>
-                    <p className="text-[10px] text-muted-foreground line-clamp-2 mb-3 leading-snug">{mcp.description}</p>
-                    <div className="flex items-center justify-between">
-                      <div className="flex flex-wrap gap-1">
-                        {(mcp.explicitCapabilities || []).slice(0, 2).map((cap: string) => (
-                          <span key={cap} className="text-[7px] font-code px-1.5 py-0.5 bg-muted/40 text-muted-foreground border border-border/50 uppercase">{cap}</span>
-                        ))}
-                      </div>
-                      <Button 
-                        variant="ghost" 
-                        size="icon" 
-                        className="h-6 w-6 text-primary/40 hover:text-primary"
-                        title="Generate Industrial Icon"
-                        onClick={(e) => { e.stopPropagation(); runIconGeneration(mcp); }}
-                      >
-                        <Zap className="w-3.5 h-3.5" />
-                      </Button>
+                    <h3 className="text-sm font-bold text-foreground mb-1.5 font-headline uppercase tracking-tighter group-hover:text-primary transition-colors">{mcp.name || 'UNNAMED_NODE'}</h3>
+                    <p className="text-[11px] text-muted-foreground line-clamp-2 font-body mb-3 leading-snug">
+                      {mcp.description || 'No descriptive metadata provided.'}
+                    </p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {(mcp.explicitCapabilities || []).slice(0, 3).map((cap: string) => (
+                        <span key={cap} className="text-[8px] font-code px-2 py-0.5 bg-muted/40 text-muted-foreground border border-border/50 uppercase tracking-tighter">
+                          {cap}
+                        </span>
+                      ))}
                     </div>
                   </div>
                 ))
               )}
             </div>
           </ScrollArea>
+          
+          <div className="p-4 border-t border-border bg-muted/10 max-h-[250px] overflow-hidden flex flex-col">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2 text-[10px] font-code text-muted-foreground uppercase font-bold tracking-widest">
+                <Target className="w-3.5 h-3.5 text-primary" />
+                <span>Strategic Roadmap</span>
+              </div>
+              <Button onClick={handleAddGoal} variant="ghost" size="icon" className="h-6 w-6 text-primary hover:bg-primary/10">
+                <Plus className="w-4 h-4" />
+              </Button>
+            </div>
+            <ScrollArea className="flex-1">
+              <div className="space-y-2 pr-2">
+                {goals.length === 0 ? (
+                  <div className="py-6 text-center opacity-10">
+                    <p className="text-[9px] font-code uppercase">Zero Objectives Defined</p>
+                  </div>
+                ) : (
+                  goals.map((goal) => (
+                    <div key={goal.id} className="flex items-start gap-3 p-2 border border-border/30 bg-background/30 hover:bg-background/50 transition-colors group">
+                      <div className="w-1.5 h-1.5 bg-primary mt-1.5 group-hover:scale-125 transition-transform" />
+                      <span className="text-[10px] text-foreground font-body leading-tight group-hover:text-primary transition-colors">{goal.title || 'Untitled Objective'}</span>
+                    </div>
+                  ))
+                )}
+              </div>
+            </ScrollArea>
+          </div>
+
+          <div className="p-4 border-t border-border bg-card">
+            <Button 
+              variant="destructive" 
+              size="sm" 
+              onClick={() => signOut(auth!)}
+              className="w-full h-11 font-code uppercase text-[10px] tracking-[0.2em] rounded-none bg-red-950/20 border border-red-500/30 hover:bg-red-900/40 text-red-500 transition-all"
+            >
+              <LogOut className="w-4 h-4 mr-2" />
+              Sever Interface Link
+            </Button>
+          </div>
         </div>
 
         <div className="flex-1 flex flex-col bg-background relative z-10">
           <div className="p-4 flex-1 flex flex-col min-h-0 overflow-hidden">
             <SystemMonitor />
             
-            <div className="flex-1 relative flex flex-col gap-4 overflow-hidden mb-4">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-3 text-[11px] font-code uppercase text-muted-foreground font-bold tracking-widest">
+                <LayoutGrid className="w-4 h-4 text-primary" />
+                <span>Ecosystem Topology</span>
+              </div>
+              {selectedMcp && (
+                <div className="flex items-center gap-3 px-3 py-1 bg-primary/10 border border-primary/30 rounded-none animate-in fade-in duration-500">
+                  <div className="status-glow-blue" />
+                  <span className="text-[10px] font-code text-primary font-bold uppercase tracking-widest">FOCUSED: {(selectedMcp.name || 'UNNAMED').toUpperCase()}</span>
+                </div>
+              )}
+            </div>
+            
+            <div className="flex-1 relative flex flex-col gap-4 overflow-hidden">
               <KnowledgeGraph mcps={mcps} />
               
-              <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 industrial-panel bg-card/30 backdrop-blur-sm flex flex-col overflow-hidden border-t-0">
-                <div className="px-4 py-1 border-b border-border bg-muted/20 flex items-center justify-between">
-                  <TabsList className="bg-transparent border-0 h-9 p-0 gap-4">
-                    <TabsTrigger value="insights" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent text-[10px] font-code uppercase tracking-widest">
-                      <FileSearch className="w-3 h-3 mr-2" />
-                      Inference
-                    </TabsTrigger>
-                    <TabsTrigger value="simulations" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent text-[10px] font-code uppercase tracking-widest">
-                      <Layers className="w-3 h-3 mr-2" />
-                      Simulations
-                    </TabsTrigger>
-                    <TabsTrigger value="evolution" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent text-[10px] font-code uppercase tracking-widest">
-                      <Zap className="w-3 h-3 mr-2" />
-                      Evolution
-                    </TabsTrigger>
-                    <TabsTrigger value="code" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent text-[10px] font-code uppercase tracking-widest">
-                      <Code2 className="w-3 h-3 mr-2" />
-                      Code
-                    </TabsTrigger>
-                  </TabsList>
+              <div className="flex-1 industrial-panel bg-card/30 backdrop-blur-sm flex flex-col overflow-hidden border-t-0">
+                <div className="px-4 py-2 border-b border-border bg-muted/20 flex items-center justify-between text-[10px] font-code uppercase font-bold tracking-widest text-muted-foreground">
+                  <div className="flex items-center gap-2">
+                    <FileSearch className="w-3.5 h-3.5 text-primary" />
+                    <span>Inference Stream</span>
+                  </div>
+                  <div className="flex items-center gap-4 opacity-50">
+                    <span>Buffer: 1024KB</span>
+                    <span>Status: RUNNING</span>
+                  </div>
                 </div>
                 
-                <ScrollArea className="flex-1">
-                  <div className="p-5">
-                    {activeTab === 'insights' && (
-                      <div className="space-y-6">
-                        {capResults && (
-                          <div className="border-l-2 border-primary pl-5 py-2 bg-primary/5">
-                            <h4 className="text-[12px] font-code uppercase text-primary font-bold tracking-widest mb-4">Implicit Potential</h4>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                              {capResults.implicitCapabilities.map((ic: any, idx: number) => (
-                                <div key={idx} className="bg-background/50 border border-border p-4">
-                                  <div className="text-[11px] font-bold text-foreground mb-1 uppercase tracking-tight">{ic.name}</div>
-                                  <div className="text-[10px] text-muted-foreground leading-relaxed">{ic.description}</div>
-                                </div>
-                              ))}
+                <ScrollArea className="flex-1 p-5">
+                  <div className="space-y-6">
+                    {!capResults && !collResults && !intentResults && !codeResults && (
+                      <div className="flex flex-col items-center justify-center h-64 opacity-[0.05] text-center">
+                        <Activity className="w-16 h-16 mb-4" />
+                        <p className="font-code text-sm tracking-[1em] uppercase">Awaiting_Neural_Inference</p>
+                      </div>
+                    )}
+                    
+                    {codeResults && (
+                      <div className="border-l-2 border-primary pl-5 py-2 bg-primary/5 animate-in slide-in-from-left-4 duration-500">
+                        <div className="flex items-center justify-between mb-4">
+                          <h4 className="text-[12px] font-code uppercase text-primary font-bold tracking-widest">Generated BWB-MCP-SERVER Implementation</h4>
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            className="h-8 w-8 text-primary hover:bg-primary/20 border border-primary/20 rounded-none"
+                            onClick={() => {
+                              navigator.clipboard.writeText(codeResults.code);
+                              toast({ title: "Copied", description: "Implementation code copied to clipboard." });
+                            }}
+                          >
+                            <Copy className="w-4 h-4" />
+                          </Button>
+                        </div>
+                        <div className="bg-background/80 border border-border p-5 font-code text-[11px] overflow-x-auto whitespace-pre leading-relaxed shadow-inner">
+                          {codeResults.code}
+                        </div>
+                        <div className="mt-3 flex items-start gap-3 text-[11px] text-muted-foreground bg-muted/10 p-3 border-l-2 border-muted-foreground/30">
+                          <CheckCircle2 className="w-4 h-4 text-green-500 shrink-0 mt-0.5" />
+                          <p className="italic">{codeResults.explanation}</p>
+                        </div>
+                      </div>
+                    )}
+
+                    {capResults && (
+                      <div className="border-l-2 border-primary pl-5 py-2 bg-primary/5 animate-in slide-in-from-left-4 duration-500">
+                        <h4 className="text-[12px] font-code uppercase text-primary font-bold tracking-widest mb-4">Capability Expansion Propositions</h4>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          {capResults.implicitCapabilities.map((ic: any, idx: number) => (
+                            <div key={idx} className="bg-background/50 border border-border p-4 hover:border-primary/50 transition-colors group">
+                              <div className="text-[11px] font-bold text-foreground font-headline mb-2 uppercase tracking-tight group-hover:text-primary">{ic.name}</div>
+                              <div className="text-[11px] text-muted-foreground font-body leading-relaxed">{ic.description}</div>
                             </div>
-                          </div>
-                        )}
-                        {intentResults && (
-                          <div className="border-l-2 border-chart-3 pl-5 py-2 bg-chart-3/5">
-                            <h4 className="text-[12px] font-code uppercase text-chart-3 font-bold tracking-widest mb-4">Strategic Gaps</h4>
-                            <div className="bg-background/50 border border-border p-4">
-                              <p className="text-[10px] text-muted-foreground mb-4">{intentResults.reasoning}</p>
-                              <div className="grid grid-cols-2 gap-2">
-                                {intentResults.missingTools.map((tool: string, idx: number) => (
-                                  <div key={idx} className="flex items-center gap-2 p-2 bg-muted/20 border border-border/40">
-                                    <div className="w-1 h-1 bg-chart-3 rounded-full" />
-                                    <span className="text-[9px] font-code uppercase">{tool}</span>
-                                  </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {collResults && (
+                      <div className="border-l-2 border-chart-2 pl-5 py-2 bg-chart-2/5 animate-in slide-in-from-left-4 duration-500">
+                        <h4 className="text-[12px] font-code uppercase text-chart-2 font-bold tracking-widest mb-4">Ecosystem Collision Simulations</h4>
+                        <div className="grid grid-cols-1 gap-4">
+                          {collResults.novelSystems.map((ns: any, idx: number) => (
+                            <div key={idx} className="bg-background/50 border border-border p-4 hover:border-chart-2/50 transition-colors">
+                              <div className="flex items-center justify-between mb-3">
+                                <div className="text-[11px] font-bold text-foreground font-headline uppercase tracking-widest">{ns.name}</div>
+                                <div className="text-[10px] font-code text-chart-2 px-2 py-0.5 border border-chart-2/30 bg-chart-2/10 font-bold uppercase">NOVELTY: {ns.noveltyRank}%</div>
+                              </div>
+                              <div className="text-[11px] text-muted-foreground font-body leading-relaxed mb-4">{ns.description}</div>
+                              <div className="flex flex-wrap gap-2">
+                                {ns.combinedMcps.map((mcp: string) => (
+                                  <span key={mcp} className="text-[9px] font-code px-2 py-0.5 border border-border/50 text-muted-foreground bg-muted/30 uppercase tracking-tighter">{mcp}</span>
                                 ))}
                               </div>
                             </div>
-                          </div>
-                        )}
-                        {!capResults && !intentResults && (
-                          <div className="flex flex-col items-center justify-center py-20 opacity-20">
-                            <Activity className="w-16 h-16 mb-4" />
-                            <p className="text-[10px] font-code uppercase tracking-[0.2em]">Ready for Inference</p>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                    {activeTab === 'simulations' && collResults && (
-                      <div className="grid grid-cols-1 gap-4">
-                        {collResults.novelSystems.map((ns: any, idx: number) => (
-                          <div key={idx} className="bg-background/50 border border-border p-4 hover:border-chart-2/50 transition-colors">
-                            <div className="flex items-center justify-between mb-2">
-                              <div className="text-[11px] font-bold uppercase tracking-widest">{ns.name}</div>
-                              <Badge variant="outline" className="text-[9px] font-code border-chart-2/20 text-chart-2">Novelty: {ns.noveltyRank}%</Badge>
-                            </div>
-                            <div className="text-[10px] text-muted-foreground leading-relaxed mb-3">{ns.description}</div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                    {activeTab === 'evolution' && evolutionResults && (
-                      <div className="space-y-4">
-                        <div className="bg-background/80 border border-border p-4 font-code text-[10px] overflow-x-auto whitespace-pre leading-relaxed">
-                          {evolutionResults.code}
-                        </div>
-                        <div className="p-3 bg-muted/10 border-l-2 border-primary/50 text-[10px] text-foreground italic">
-                          {evolutionResults.impactAnalysis}
+                          ))}
                         </div>
                       </div>
                     )}
-                    {activeTab === 'code' && codeResults && (
-                      <div className="space-y-4">
-                        <div className="bg-background/80 border border-border p-4 font-code text-[10px] overflow-x-auto whitespace-pre leading-relaxed">
-                          {codeResults.code}
-                        </div>
-                        <div className="p-3 bg-muted/10 border-l-2 border-green-500/50 text-[10px] text-muted-foreground italic">
-                          {codeResults.explanation}
+
+                    {intentResults && (
+                      <div className="border-l-2 border-chart-3 pl-5 py-2 bg-chart-3/5 animate-in slide-in-from-left-4 duration-500">
+                        <h4 className="text-[12px] font-code uppercase text-chart-3 font-bold tracking-widest mb-4">Strategic Gap Analysis Matrix</h4>
+                        <div className="bg-background/50 border border-border p-4">
+                          <div className="flex items-start gap-3 text-[11px] text-muted-foreground font-body leading-relaxed mb-5 bg-muted/10 p-3">
+                            <AlertTriangle className="w-5 h-5 text-chart-3 shrink-0 mt-0.5" />
+                            <p>{intentResults.reasoning}</p>
+                          </div>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                            {intentResults.missingTools.map((tool: string, idx: number) => (
+                              <div key={idx} className="flex items-center gap-3 p-2 bg-muted/20 border border-border/40 group hover:border-chart-3/50 transition-colors">
+                                <div className="w-1.5 h-1.5 bg-chart-3 rounded-full animate-pulse" />
+                                <span className="text-[10px] font-code text-foreground uppercase tracking-tighter group-hover:text-chart-3">{tool}</span>
+                              </div>
+                            ))}
+                          </div>
                         </div>
                       </div>
                     )}
                   </div>
                 </ScrollArea>
-              </Tabs>
+              </div>
             </div>
 
             <div className="h-40 industrial-panel bg-black/80 border-t-0 flex flex-col shrink-0">
               <div className="h-7 border-b border-border/50 bg-muted/20 px-3 flex items-center justify-between">
                 <div className="flex items-center gap-2 text-[9px] font-code text-primary uppercase tracking-[0.2em]">
-                  <TerminalIcon className="w-3 h-3" />
+                  <Terminal className="w-3 h-3" />
                   <span>Real-time System Terminal</span>
                 </div>
                 <Button variant="ghost" size="icon" className="h-5 w-5 hover:bg-muted" onClick={() => setLogs([])}>
@@ -587,7 +709,7 @@ export default function BWBHub() {
                       )}>[{log.type}]</span>
                       <span className="opacity-80">{log.msg}</span>
                     </div>
-                  ))}
+                  ))}\
                   <div ref={terminalEndRef} />
                 </div>
               </ScrollArea>
@@ -605,102 +727,88 @@ export default function BWBHub() {
           
           <ScrollArea className="flex-1 p-4">
             <div className="flex flex-col gap-4">
-              <div className="industrial-panel p-3 bg-primary/5 border-primary/20 rounded-none mb-2">
-                <div className="flex flex-col gap-1.5 mb-3">
-                  <label className="text-[9px] font-code text-muted-foreground uppercase tracking-widest">Evolution Target</label>
-                  <select 
-                    value={evolutionTarget}
-                    onChange={(e) => setEvolutionTarget(e.target.value as RepositoryTarget)}
-                    className="h-8 bg-background border border-border px-2 text-[10px] font-code uppercase text-primary outline-none"
-                  >
-                    <option value="BWB-ROOT">BWB-ROOT</option>
-                    <option value="BWB-CODE-ASSISTANT">BWB-CODE-ASSISTANT</option>
-                    <option value="BWB-MCP-SERVER">BWB-MCP-SERVER</option>
-                  </select>
-                </div>
-                <Input 
-                  placeholder="Evolution logic..." 
-                  className="h-8 text-[10px] font-code rounded-none border-border bg-background/50 mb-3"
-                  value={evolutionInstruction}
-                  onChange={(e) => setEvolutionInstruction(e.target.value)}
-                />
-                <Button 
-                  className="w-full h-9 bg-primary text-background font-code uppercase tracking-widest text-[10px] rounded-none hover:bg-primary/90"
-                  disabled={loadingStates['evolution']}
-                  onClick={runEvolutionAgent}
-                >
-                  {loadingStates['evolution'] ? <Activity className="w-3.5 h-3.5 animate-spin" /> : <Zap className="w-3.5 h-3.5 mr-2" />}
-                  {loadingStates['evolution'] ? 'Evolving...' : 'Execute Evolution'}
-                </Button>
-              </div>
-
-              <AgentPanel name="Capability Agent" icon={<GitBranch className="w-4 h-4" />} description="Analyze implicit expansion potential." onExecute={runCapabilityAgent} loading={loadingStates['capability']} />
-              <AgentPanel name="Collision Agent" icon={<Layers className="w-4 h-4" />} description="Simulate combinatorial collisions." onExecute={runCollisionAgent} loading={loadingStates['collision']} />
-              <AgentPanel name="Intent Agent" icon={<Target className="w-4 h-4" />} description="Map strategic gaps for goals." onExecute={runIntentAgent} loading={loadingStates['intent']} />
-              <AgentPanel name="Boilerplate Agent" icon={<Code2 className="w-4 h-4" />} description="Generate industrial code." onExecute={runCodeAgent} loading={loadingStates['code']} />
+              <AgentPanel 
+                name="Capability Agent"
+                icon={<GitBranch className="w-4 h-4" />}
+                description="Derive implicit expansion potential from existing node metadata and explicit capability definitions."
+                onExecute={runCapabilityAgent}
+                loading={loadingStates['capability']}
+              />
+              <AgentPanel 
+                name="Collision Agent"
+                icon={<Layers className="w-4 h-4" />}
+                description="Simulate combinatorial collisions between multiple MCP providers to discover novel emergent systems."
+                onExecute={runCollisionAgent}
+                loading={loadingStates['collision']}
+              />
+              <AgentPanel 
+                name="Intent Agent"
+                icon={<Target className="w-4 h-4" />}
+                description="Cross-reference strategic objectives against synchronized capabilities to map critical technological gaps."
+                onExecute={runIntentAgent}
+                loading={loadingStates['intent']}
+              />
+              
+              <Separator className="my-4 bg-border/40" />
+              
+              <AgentPanel 
+                name="Boilerplate Agent"
+                icon={<Code2 className="w-4 h-4" />}
+                description="Generate production-ready BWB-MCP-SERVER TypeScript implementation for the selected ecosystem target."
+                onExecute={runCodeAgent}
+                loading={loadingStates['code']}
+              />
+              
+              {simulations.length > 0 && (
+                <>
+                  <Separator className="my-4 bg-border/40" />
+                  <div className="flex flex-col gap-3">
+                    <div className="flex items-center gap-2 text-[10px] font-code uppercase text-muted-foreground font-bold tracking-[0.2em] mb-1">
+                      <History className="w-3.5 h-3.5" />
+                      <span>Simulation History</span>
+                    </div>
+                    {simulations.map((sim) => (
+                      <div key={sim.id} className="industrial-panel p-3 bg-muted/5 hover:bg-muted/15 transition-all cursor-pointer group border-border/40">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-[9px] font-code text-muted-foreground uppercase leading-none">
+                            TICK_{formatTimestamp(sim.timestamp)}
+                          </span>
+                          <span className="text-[9px] font-code text-primary font-bold leading-none uppercase">{sim.results?.length || 0} Nodes</span>
+                        </div>
+                        <div className="text-[10px] font-headline text-foreground truncate uppercase font-bold group-hover:text-primary transition-colors">
+                          {sim.results?.[0]?.name || 'UNTITLED_SIM'}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
             </div>
           </ScrollArea>
         </div>
       </main>
 
-      <Dialog open={isMcpEditorOpen} onOpenChange={setIsMcpEditorOpen}>
-        <DialogContent className="max-w-md industrial-panel bg-card p-6 border-primary/20">
-          <DialogHeader>
-            <DialogTitle className="text-sm font-code uppercase text-primary tracking-widest">Edit Node Parameters</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label className="text-[10px] font-code uppercase opacity-70">Node Identity</Label>
-              <Input 
-                value={editingMcp?.name || ''} 
-                onChange={(e) => setEditingMcp(prev => ({ ...prev, name: e.target.value }))}
-                className="font-code text-xs bg-background/50 border-border"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label className="text-[10px] font-code uppercase opacity-70">Functional Scope</Label>
-              <Textarea 
-                value={editingMcp?.description || ''} 
-                onChange={(e) => setEditingMcp(prev => ({ ...prev, description: e.target.value }))}
-                className="font-body text-xs min-h-[100px] bg-background/50 border-border"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label className="text-[10px] font-code uppercase opacity-70">Status Protocol</Label>
-              <select 
-                value={editingMcp?.status || 'experimental'}
-                onChange={(e) => setEditingMcp(prev => ({ ...prev, status: e.target.value as any }))}
-                className="w-full h-9 bg-background border border-border px-2 text-[10px] font-code uppercase text-primary"
-              >
-                <option value="active">ACTIVE</option>
-                <option value="deprecated">DEPRECATED</option>
-                <option value="experimental">EXPERIMENTAL</option>
-              </select>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsMcpEditorOpen(false)} className="rounded-none font-code uppercase text-[10px]">Cancel</Button>
-            <Button onClick={handleUpdateMcp} className="rounded-none bg-primary text-background font-code uppercase text-[10px]">Synchronize</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
       <footer className="h-7 border-t border-border bg-card px-4 flex items-center justify-between shrink-0 z-20">
         <div className="flex items-center gap-6 text-[9px] font-code text-muted-foreground tracking-widest">
           <div className="flex items-center gap-2">
             <div className="status-glow-green" />
-            <span className="font-bold text-foreground">ENHANCED_HUB_V2</span>
+            <span className="font-bold text-foreground">CORE_STABLE</span>
           </div>
           <Separator orientation="vertical" className="h-3 opacity-30" />
           <div className="flex items-center gap-2">
             <Activity className="w-3 h-3" />
             <span>SYNC_CLOCK: {currentTime}</span>
           </div>
+          <Separator orientation="vertical" className="h-3 opacity-30" />
+          <div className="flex items-center gap-2">
+            <Network className="w-3 h-3" />
+            <span>BWB-MCP-SERVER_UPLINK: ACTIVE</span>
+          </div>
         </div>
         <div className="flex items-center gap-6 text-[9px] font-code uppercase tracking-widest">
-          <span className="text-muted-foreground opacity-60">AUTH_SIG: <span className="text-foreground font-bold">ADMIN</span></span>
+          <span className="text-muted-foreground opacity-60">AUTH_SIG: <span className="text-foreground font-bold">{user?.email?.split('@')[0]}</span></span>
           <Separator orientation="vertical" className="h-3 opacity-30" />
-          <span className="text-primary font-bold animate-pulse">SYSTEM_UPLINK_STABLE</span>
+          <span className="text-primary font-bold animate-pulse">SYSTEM_ONLINE_ENCRYPTED</span>
         </div>
       </footer>
     </div>
