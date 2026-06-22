@@ -2,11 +2,10 @@
 # https://firebase.google.com/docs/app-hosting/configure
 
 runConfig:
-  # Increase this value if you'd like to automatically spin up
-  # more instances in response to increased traffic.
-  maxInstances: 1
+  # Resource allocation for high-density AI orchestration
+  maxInstances: 2
   cpu: 1
-  memoryMiB: 512
+  memoryMiB: 1024
 
 env:
   - variable: GEMINI_API_KEY
